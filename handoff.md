@@ -131,9 +131,21 @@ esac
 
 Pass `DOCKER_GID` as a build arg and at runtime via `--group-add`. Skip entirely on macOS.
 
+### `--workdir` flag
+
+`claude.sh` accepts `--workdir=<path>` (or `--workdir <path>`) to override the working directory
+for a single invocation. Priority: `--workdir` flag > `CLAUDE_WORKDIR` in `.env` > `$PWD`.
+
+```bash
+claude-sandbox --workdir=/work/projects/THWB/Code
+```
+
+Useful when `CLAUDE_WORKDIR` is unset and you want to launch into a specific directory without
+being in it on the host.
+
 ### Argument passthrough to Claude
 
-`claude.sh` parses its own flags (`--auth`) and passes everything else to the claude binary:
+`claude.sh` parses its own flags (`--auth`, `--workdir`) and passes everything else to the claude binary:
 
 ```bash
 AUTH="${DEFAULT_AUTH:-sso}"
@@ -287,9 +299,9 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - [x] Add `VERSION` file; `--version` reads from it
 
 #### Phase 1 testing — IN PROGRESS
-- [x] vanilla profile setup flow works end-to-end
-- [ ] Test apikey/FuelIX auth flow (`--auth=apikey`)
-- [ ] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`)
+- [x] vanilla profile setup flow works end-to-end (tested fresh reset + re-setup)
+- [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; Sonnet 5 available, Opus 5 not licensed on TELUS FuelIX account
+- [x] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`) — works; URL printed to terminal, paste into host browser; Claude Enterprise with Opus 5 available
 - [ ] Test omc profile setup (CLAUDE.md copy, omc settings.json)
 - [ ] Test aihero plugin install one-off container in `setup.sh`
 
@@ -301,6 +313,10 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - SSH directory defaults to `~/.ssh`; type `skip` to omit mount
 - Workspace directory default removed — was showing caller's `$PWD` which is too narrow; now blank (falls back to `$PWD` at runtime)
 - Alias printed without `--auth` flag — auth default lives in `.env`
+- `exec docker run` bug fixed — `DOCKER_ARGS` already starts with `run`; was launching image named `run`; fixed to `exec docker`
+- `--workdir=<path>` flag added to `claude.sh` for per-invocation working directory override (priority: flag > CLAUDE_WORKDIR in .env > $PWD)
+- `ANTHROPIC_MODEL` removed from seeded `settings.json` — SSO gets org default (Sonnet 5), FuelIX selects its own default without a pin; no model hardcoding anywhere
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` added to apikey Docker `-e` inject — FuelIX needs it as a real env var, not just in settings.json
 
 ---
 
@@ -311,7 +327,6 @@ Auth tokens must **never** appear here — injected by Docker `-e` only.
 ```json
 {
   "env": {
-    "ANTHROPIC_MODEL": "claude-sonnet-4-6",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "permissions": {
@@ -352,12 +367,18 @@ if [[ "$AUTH" == "apikey" ]]; then
     [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set"; exit 1; }
     DOCKER_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_API_KEY")
     [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
+    DOCKER_ARGS+=(-e "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 fi
 # SSO: no auth env vars passed — Claude uses OAuth from .home/.claude.json
 ```
 
-Note: current host setup uses FuelIX (apikey mode) via `settings.json` env block. SSO is an
-untested path. In the container, settings.json never contains auth tokens — Docker env vars only.
+`ANTHROPIC_MODEL` is NOT injected — both FuelIX and SSO select a sensible default without it
+(FuelIX → Sonnet 5, SSO → org default Sonnet 5). In the container, settings.json never contains
+auth tokens — Docker env vars only.
+
+**Auth modes tested:**
+- `--auth=apikey` (FuelIX): Sonnet 5 available, Opus 5 not licensed on TELUS FuelIX account → "API Usage Billing"
+- `--auth=sso` (claude.ai): Claude Enterprise, Opus 5 + Sonnet 5 available → "Claude Enterprise"
 
 ---
 
