@@ -37,11 +37,11 @@ AUTH_MODE="${AUTH_MODE:-apikey}"
 
 # Base URL
 echo "ANTHROPIC_BASE_URL:"
-echo "  1) api.anthropic.com"
-echo "  2) https://api.fuelix.ai (default)"
+echo "  1) https://api.anthropic.com (default)"
+echo "  2) https://api.fuelix.ai (FueliX)"
 echo "  3) Other / skip"
-read -rp "  Choice [2]: " BASE_URL_CHOICE
-case "${BASE_URL_CHOICE:-2}" in
+read -rp "  Choice [1]: " BASE_URL_CHOICE
+case "${BASE_URL_CHOICE:-1}" in
     1) BASE_URL="https://api.anthropic.com" ;;
     2) BASE_URL="https://api.fuelix.ai" ;;
     3) read -rp "  Enter URL (press Enter to leave blank): " BASE_URL ;;
@@ -70,23 +70,28 @@ if [[ -n "$BASE_URL" && -n "$API_KEY" ]]; then
 
     if [[ ${#CLAUDE_MODELS[@]} -gt 0 ]]; then
         echo "Available Claude models:"
+        default_idx=1
         i=1
         for m in "${CLAUDE_MODELS[@]}"; do
             label="  $i) $m"
-            [[ "$m" == "claude-sonnet-4-6" ]] && label+=" (recommended)"
+            if [[ "$m" == "claude-sonnet-5" ]]; then
+                label+=" (recommended)"
+                default_idx=$i
+            fi
             echo "$label"
             ((i++))
         done
         echo ""
-        read -rp "Select model [press Enter to leave unset]: " model_choice
+        read -rp "Select model [${default_idx}]: " model_choice
+        model_choice="${model_choice:-$default_idx}"
         if [[ "$model_choice" =~ ^[0-9]+$ && "$model_choice" -ge 1 && "$model_choice" -le "${#CLAUDE_MODELS[@]}" ]]; then
             ANTHROPIC_MODEL="${CLAUDE_MODELS[$((model_choice - 1))]}"
             echo "Selected: $ANTHROPIC_MODEL"
         fi
     else
         echo "  Could not fetch model list — enter model ID manually:"
-        read -rep "  ANTHROPIC_MODEL [claude-sonnet-4-6]: " ANTHROPIC_MODEL
-        ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+        read -rep "  ANTHROPIC_MODEL [claude-sonnet-5]: " ANTHROPIC_MODEL
+        ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-5}"
     fi
     echo ""
 fi
@@ -170,10 +175,10 @@ else
 fi
 
 # Seed .omc-config.json so OMC skips its interactive setup wizard on first launch
-# (without this, omc-setup spawns a planner agent requesting opus, which FuelIX doesn't license)
+# (without this, omc-setup spawns a planner agent requesting opus on first run)
 echo "  Seeding .omc-config.json..."
-OMC_VERSION=$(docker run --rm claude-code:omc node -e \
-    "console.log(require('/usr/local/lib/node_modules/oh-my-claudecode/package.json').version)" \
+OMC_VERSION=$(docker run --rm --entrypoint node claude-code:omc \
+    -e "console.log(require('/usr/local/lib/node_modules/oh-my-claudecode/package.json').version)" \
     2>/dev/null || echo "unknown")
 SETUP_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 cat > "$HOME_DIR/.claude/.omc-config.json" <<EOF
@@ -194,20 +199,3 @@ cat > "$HOME_DIR/.claude/.omc-config.json" <<EOF
 EOF
 echo "  .omc-config.json written (omc $OMC_VERSION)."
 
-# Done
-echo ""
-echo "=========================================="
-echo "Setup complete!"
-echo ""
-echo "Add this alias to ~/.bash_aliases:"
-echo ""
-echo "  alias claude-sandbox='$REPO_DIR/claude.sh'"
-echo ""
-echo "Then run: source ~/.bash_aliases"
-echo ""
-echo "First-run notes:"
-if [[ "$AUTH_MODE" == "sso" ]]; then
-    echo "  - SSO: Look for a URL in the terminal — open it in your host browser"
-    echo "  - Approve the TELUS managed settings dialog — happens once per fresh .home/"
-fi
-echo "=========================================="

@@ -300,27 +300,35 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 
 #### Phase 1 testing — IN PROGRESS
 - [x] vanilla profile setup flow works end-to-end (tested fresh reset + re-setup)
-- [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; `claude-sonnet-4-6` confirmed available on TELUS FuelIX
+- [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; `claude-sonnet-5` confirmed available on TELUS FuelIX
 - [x] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`) — works; URL printed to terminal, paste into host browser; Claude Enterprise with Opus 5 available
-- [ ] Test omc profile setup end-to-end with model pin (CLAUDE.md copy, .omc-config.json seed, ANTHROPIC_MODEL injected)
+- [x] Test omc profile setup end-to-end (CLAUDE.md copy, .omc-config.json seed, ANTHROPIC_MODEL injected, omc skills confirmed working)
+- [x] `--model=non-exist` flag passthrough confirmed — FuelIX 403 surfaced cleanly in Claude Code UI
 - [ ] Test aihero plugin install one-off container in `setup.sh`
 
 #### Setup flow fixes applied during testing
 - `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
 - API key prompt now silent (`read -rs`) — was visible in terminal
-- ANTHROPIC_BASE_URL prompt replaced with numbered menu; FuelIX is now default (option 2)
+- ANTHROPIC_BASE_URL prompt replaced with numbered menu; api.anthropic.com is default [1], FuelIX available as option 2
 - API key prompt skipped when BASE_URL is blank (no gateway = no key needed)
 - SSH directory defaults to `~/.ssh`; type `skip` to omit mount; `read -e` added for tab completion on SSH and workspace prompts
 - Workspace directory default removed — was showing caller's `$PWD` which is too narrow; now blank (falls back to `$PWD` at runtime)
-- Alias printed without `--auth` flag — auth default lives in `.env`; default changed from `sso` to `apikey`
+- Alias auto-written to shell config file (`~/.bash_aliases` on Linux/WSL, `~/.zshrc` on macOS+zsh, `~/.bash_profile` on macOS+bash) — default name `claude-sandbox`; searched by repo path so rename works on re-setup; source reminder printed in closing banner
+- Profile list ordered (vanilla → omc → aihero) with one-line descriptions; vanilla is default [1]
+- Model selection defaults to recommended (`claude-sonnet-5`) — index pre-selected, no blank entry allowed
+- Closing banner moved to `init()` — shows configuration summary with masked API key; `Run: source` + `Run: <alias>` at the end
+- Unsupported OS guard added (MINGW/MSYS/CYGWIN) — fails fast with WSL2 redirect message
 - `exec docker run` bug fixed — `DOCKER_ARGS` already starts with `run`; was launching image named `run`; fixed to `exec docker`
 - `--workdir=<path>` flag added to `claude.sh` for per-invocation working directory override (priority: flag > CLAUDE_WORKDIR in .env > $PWD)
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` added to apikey Docker `-e` inject — FuelIX needs it as a real env var, not just in settings.json
 - Image existence check added to `claude.sh` — gives clear error + reset instructions if setup was interrupted before image build
-- TELUS managed settings dialog note moved inside SSO block — dialog only appears on SSO, not apikey
-- `.omc-config.json` pre-seeded in omc `setup.sh` — prevents OMC from launching interactive setup wizard (which requests opus) on first launch
-- `ANTHROPIC_MODEL` added to `.env` — set during setup via curl `/v1/models` enumeration; FuelIX exposes `claude-sonnet-4-6` as primary Claude model; injected into container via `-e`; fallback default `claude-sonnet-4-6` if curl fails
+- Org managed settings dialog note moved inside SSO block — dialog only appears on SSO, not apikey
+- `.omc-config.json` pre-seeded in omc `setup.sh` — prevents OMC from launching interactive setup wizard (which requests opus) on first launch; `docker run --entrypoint node` used to get omc version (container ENTRYPOINT intercepts bare `node` otherwise)
+- `ANTHROPIC_MODEL` added to `.env` — set during setup via curl `/v1/models` enumeration; `claude-sonnet-5` is recommended default on FuelIX; injected into container via `-e`
 - `--model=<id>` flag added to `claude.sh` — per-invocation override of `ANTHROPIC_MODEL` (priority: flag > .env > unset)
+- Reset message now shows actual script path instead of hardcoded `claude-sandbox`
+- TELUS/org-specific references removed from scripts — BASE_URL menu now defaults to api.anthropic.com [1] with FueliX as option 2; "org managed settings" used in messaging
+- Phases restructured: Phase 2 = architectural review (OMC + aihero), Phase 3 = README + CLAUDE.md, Phase 4 = MCP Servers
 
 ---
 
@@ -388,7 +396,8 @@ In the container, settings.json never contains auth tokens — Docker env vars o
 FuelIX `/v1/models` does **not** expose `claude-opus-5` or any opus model. The Claude models available
 on the TELUS FuelIX account as of 2026-08-15:
 
-- `claude-sonnet-4-6` ← **recommended default**
+- `claude-sonnet-5` ← **recommended default**
+- `claude-sonnet-4-6`
 - `claude-sonnet-5`, `claude-sonnet-4-5`, `claude-sonnet-4`, `claude-3-7-sonnet`
 - `claude-haiku-4-5`, `claude-haiku-4`, `claude-3-5-haiku`
 
@@ -418,7 +427,26 @@ If this proves noisy, escalate to Option B: add `--add-host apigw-pr.telus.com:0
 
 ---
 
-## Phase 2 — MCP Servers (deferred)
+## Phase 2 — Architectural Review (deferred)
+
+Run an architectural review of the project using OMC (omc profile) and aihero (aihero profile) — using the tool itself to review its own design. Goals:
+
+- Validate the profile/image split, `.home/` isolation, and auth injection approach
+- Identify any security, usability, or portability gaps
+- Produce a list of recommendations to carry into Phase 3/4
+
+---
+
+## Phase 3 — Documentation (deferred)
+
+Author two files:
+
+- **README.md** — user-facing: what the project does, threat model summary, quick-start per profile, `.env` schema, auth modes, `--workdir` / `--model` flags, reset instructions, macOS/WSL notes
+- **CLAUDE.md** — developer-facing: repo structure, design decisions (profile lock, image split, `.home/` isolation, Docker GID logic), phase roadmap, contribution guidance
+
+---
+
+## Phase 4 — MCP Servers (deferred)
 
 Design is partially resolved. Implement after Phase 1 is stable.
 
@@ -465,7 +493,7 @@ Design is partially resolved. Implement after Phase 1 is stable.
 - `--dangerously-skip-permissions` in ENTRYPOINT is intentional: container is the sandbox
 - Docker socket is mounted; acceptable given threat model (hooks do telemetry, not container escapes)
 - `marc` user in container matches host uid 1000 — file ownership on mounted `/work/projects` is correct
-- First run of a new profile shows TELUS managed settings approval dialog — approve once;
+- First run of a new profile shows the org managed settings approval dialog — approve once;
   consent saved to `.home/.claude/remote-settings-consent.json`, not shown again
 - `ANTHROPIC_AUTH_TOKEN` (FuelIX key) was previously hardcoded in host `settings.json` env block —
   this is the pattern to avoid in the container; all auth comes from `.env` → Docker `-e`

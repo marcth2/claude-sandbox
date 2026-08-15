@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
+# Unsupported: native Windows shells (Git Bash, MSYS2, Cygwin) — use WSL2 instead
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "Error: unsupported shell environment '$(uname -s)'."
+        echo "Run claude-docker from a WSL2 terminal, not PowerShell, Git Bash, or Cygwin."
+        exit 1
+        ;;
+esac
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE_FILE="$REPO_DIR/.claude-profile"
 
@@ -35,16 +44,33 @@ EOF
 init() {
     echo "=== Claude Docker — First Run Setup ==="
     echo ""
+
+    # Fixed display order; vanilla is the plain baseline and the default
+    local ordered=(vanilla omc aihero)
+    local -A descriptions=(
+        [vanilla]="Claude Code, no plugins — plain baseline"
+        [omc]="Claude Code + oh-my-claudecode multi-agent orchestration"
+        [aihero]="Claude Code + AI Hero skill pack"
+    )
+
+    local profiles=()
     echo "Available profiles:"
     local i=1
-    local profiles=()
+    for name in "${ordered[@]}"; do
+        [[ -d "$REPO_DIR/profiles/$name" ]] || continue
+        profiles+=("$name")
+        echo "  $i) $name — ${descriptions[$name]:-}"
+        ((i++))
+    done
+    # Any unrecognized profiles not in the ordered list
     for d in "$REPO_DIR/profiles"/*/; do
-        local name
-        name="$(basename "$d")"
+        local name; name="$(basename "$d")"
+        [[ " ${ordered[*]} " =~ " $name " ]] && continue
         profiles+=("$name")
         echo "  $i) $name"
         ((i++))
     done
+
     echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
@@ -53,7 +79,106 @@ init() {
     echo "$selected" > "$PROFILE_FILE"
     echo "Profile '$selected' selected."
     echo ""
-    exec "$REPO_DIR/profiles/$selected/setup.sh"
+
+    bash "$REPO_DIR/profiles/$selected/setup.sh"
+
+    # Alias setup — one place for all profiles
+    echo ""
+
+    # Pick shell config file based on OS and default shell
+    # WSL/macOS paths are untested — logic based on standard conventions
+    local aliases_file
+    case "$(uname -s)" in
+        Darwin*)
+            if [[ "${SHELL:-}" == */zsh ]]; then
+                aliases_file="$HOME/.zshrc"
+            else
+                aliases_file="$HOME/.bash_profile"
+            fi
+            ;;
+        Linux*)
+            aliases_file="$HOME/.bash_aliases"  # Linux and WSL
+            ;;
+        *)
+            echo "Unknown OS — add alias manually:"
+            echo "  alias <name>='${REPO_DIR}/claude.sh'"
+            return 0
+            ;;
+    esac
+
+    local alias_name alias_line existing_line existing_name
+
+    # Search by repo path — finds entry regardless of alias name chosen last time
+    existing_line=$(grep -E "^alias [^=]+='${REPO_DIR}/claude\.sh'" "$aliases_file" 2>/dev/null || true)
+
+    if [[ -n "$existing_line" ]]; then
+        existing_name=$(echo "$existing_line" | sed "s/^alias \([^=]*\)=.*/\1/")
+        echo "Found existing alias for this install:"
+        echo "  $existing_line"
+        read -rp "Alias name [${existing_name}]: " alias_name
+        alias_name="${alias_name:-$existing_name}"
+        if [[ "$alias_name" != "$existing_name" ]]; then
+            sed -i "/^alias ${existing_name}=/d" "$aliases_file"
+            echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >> "$aliases_file"
+            echo "Renamed to '${alias_name}'."
+        fi
+    else
+        read -rp "Alias name [claude-sandbox]: " alias_name
+        alias_name="${alias_name:-claude-sandbox}"
+        if [[ -n "$alias_name" ]]; then
+            alias_line="alias ${alias_name}='${REPO_DIR}/claude.sh'"
+            if grep -qE "^alias ${alias_name}=" "$aliases_file" 2>/dev/null; then
+                local conflict; conflict=$(grep -E "^alias ${alias_name}=" "$aliases_file")
+                echo "Name '${alias_name}' already used:"
+                echo "  $conflict"
+                read -rp "Overwrite it? [y/N]: " overwrite
+                if [[ "${overwrite,,}" == "y" ]]; then
+                    sed -i "s|^alias ${alias_name}=.*|${alias_line}|" "$aliases_file"
+                    echo "Updated."
+                fi
+            else
+                echo "$alias_line" >> "$aliases_file"
+                echo "Added."
+            fi
+        fi
+    fi
+
+    # Closing summary — source .env to read what setup wrote
+    [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
+    local launch_cmd="${alias_name:-$REPO_DIR/claude.sh}"
+    echo ""
+    echo "=========================================="
+    echo "Setup complete!"
+    echo ""
+    echo "Configuration:"
+    printf "  %-20s %s\n" "Profile:" "$selected"
+    printf "  %-20s %s\n" "Default Auth:" "${DEFAULT_AUTH:-apikey}"
+    if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+        local key_mask; key_mask=$(printf '%*s' "${#ANTHROPIC_API_KEY}" '' | tr ' ' '*')
+        printf "  %-20s %s\n" "API Key:" "$key_mask"
+    fi
+    [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && printf "  %-20s %s\n" "Gateway:" "$ANTHROPIC_BASE_URL"
+    if [[ -n "${ANTHROPIC_MODEL:-}" ]]; then
+        printf "  %-20s %s\n" "Default Model:" "$ANTHROPIC_MODEL"
+    else
+        printf "  %-20s %s\n" "Default Model:" "(gateway default)"
+    fi
+    if [[ -n "${CLAUDE_WORKDIR:-}" ]]; then
+        printf "  %-20s %s\n" "Default Workspace:" "$CLAUDE_WORKDIR"
+    else
+        printf "  %-20s %s\n" "Default Workspace:" "\$PWD at runtime"
+    fi
+    [[ -n "${SSH_DIR:-}" ]] && printf "  %-20s %s\n" "SSH keys:" "$SSH_DIR"
+    if [[ "${DEFAULT_AUTH:-apikey}" == "sso" ]]; then
+        echo ""
+        echo "First-run notes:"
+        echo "  - Look for a URL in the terminal — open it in your host browser"
+        echo "  - Approve the org managed settings dialog (once per fresh .home/)"
+    fi
+    echo ""
+    [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
+    echo "Run: $launch_cmd"
+    echo "=========================================="
 }
 
 do_reset() {
@@ -83,7 +208,7 @@ do_reset() {
 
     rm -f "$PROFILE_FILE" "$REPO_DIR/.env"
     rm -rf "$REPO_DIR/.home"
-    echo "Reset complete. Run claude-sandbox again to set up a fresh profile."
+    echo "Reset complete. Run '${REPO_DIR}/claude.sh' again to set up a fresh profile."
     exit 0
 }
 
