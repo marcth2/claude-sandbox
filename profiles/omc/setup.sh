@@ -41,7 +41,7 @@ AUTH_MODE="${AUTH_MODE:-apikey}"
 
 # Base URL
 echo "ANTHROPIC_BASE_URL:"
-echo "  1) https://api.fuelix.ai (FueliX) (default)"
+echo "  1) https://api.fuelix.ai (default)"
 echo "  2) https://api.anthropic.com"
 echo "  3) Other / skip"
 read -rp "  Choice [1]: " BASE_URL_CHOICE

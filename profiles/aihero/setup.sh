@@ -37,7 +37,7 @@ read -rp "Default auth mode [sso/apikey] (default: apikey): " AUTH_MODE
 AUTH_MODE="${AUTH_MODE:-apikey}"
 
 echo "ANTHROPIC_BASE_URL:"
-echo "  1) https://api.fuelix.ai (FueliX) (default)"
+echo "  1) https://api.fuelix.ai (default)"
 echo "  2) https://api.anthropic.com"
 echo "  3) Other / skip"
 read -rp "  Choice [1]: " BASE_URL_CHOICE
@@ -148,7 +148,15 @@ cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
   "skipWorkflowUsageWarning": true,
   "alwaysThinkingEnabled": true,
   "spinnerTipsEnabled": true,
-  "theme": "dark"
+  "theme": "dark",
+  "extraKnownMarketplaces": {
+    "mattpocock": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/mattpocock/skills"
+      }
+    }
+  }
 }
 SETTINGS
 echo "  settings.json written."
