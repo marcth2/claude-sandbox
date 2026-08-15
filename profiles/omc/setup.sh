@@ -15,6 +15,7 @@ source "$REPO_DIR/profiles/_common.sh"
 common_detect_os
 common_prompt_auth
 common_prompt_mounts
+common_prompt_git
 common_write_env
 common_build_image
 common_seed_home

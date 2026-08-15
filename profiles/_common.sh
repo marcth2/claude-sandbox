@@ -105,6 +105,22 @@ common_prompt_mounts() {
     read -rep "Default workspace directory (press Enter to leave unset — uses \$PWD at runtime): " WORKDIR_INPUT
 }
 
+common_prompt_git() {
+    local host_name host_email
+    host_name=$(git config --global user.name 2>/dev/null || echo "")
+    host_email=$(git config --global user.email 2>/dev/null || echo "")
+
+    read -rep "Git user.name for commits inside the container${host_name:+ [$host_name]} (Enter to skip): " GIT_USER_NAME
+    GIT_USER_NAME="${GIT_USER_NAME:-$host_name}"
+
+    if [[ -n "$GIT_USER_NAME" ]]; then
+        read -rep "Git user.email${host_email:+ [$host_email]}: " GIT_USER_EMAIL
+        GIT_USER_EMAIL="${GIT_USER_EMAIL:-$host_email}"
+    else
+        GIT_USER_EMAIL=""
+    fi
+}
+
 common_write_env() {
     cat > "$ENV_FILE" <<EOF
 # Auth
@@ -141,4 +157,13 @@ common_seed_home() {
     echo ""
     echo "Seeding .home/.claude/..."
     mkdir -p "$HOME_DIR/.claude"
+
+    if [[ -n "${GIT_USER_NAME:-}" && -n "${GIT_USER_EMAIL:-}" ]]; then
+        cat > "$HOME_DIR/.gitconfig" <<EOF
+[user]
+    name = $GIT_USER_NAME
+    email = $GIT_USER_EMAIL
+EOF
+        echo "  .gitconfig seeded ($GIT_USER_NAME <$GIT_USER_EMAIL>)."
+    fi
 }

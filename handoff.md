@@ -89,6 +89,7 @@ This means all hook-written files land in `.home/`:
 - `.home/.claude/` → OAuth token, `remote-settings.json`, memories
 - `.home/.zshrc` → hook 2 writes here, not to host `~/.zshrc`
 - `.home/.claude.json` → legacy auth file
+- `.home/.gitconfig` → git identity for commits made inside the container (seeded by `setup.sh` from the host's own `git config --global user.name/user.email`, since the host's real `~/.gitconfig` isn't visible in here)
 
 Each profile has its own `.home/` (e.g., `.home-omc/`, `.home-aihero/` if multiple checkouts exist — but conventionally just `.home/` since profiles are separate checkouts).
 
@@ -198,12 +199,13 @@ Runs once per checkout via `init()`. Per-profile `setup.sh` in `profiles/<name>/
 3. ANTHROPIC_API_KEY — press Enter to skip (required only if apikey)
 4. ANTHROPIC_BASE_URL — press Enter for api.anthropic.com
 5. SSH key directory [~/.ssh] — press Enter to skip (no git push from container)
-6. Default workspace directory [$PWD] — press Enter for current directory
-7. Write .env
-8. Build Docker image (docker compose build with correct GID arg)
-9. [aihero only] Run plugin install one-off container to seed .home/
-10. Print alias to add to ~/.bash_aliases
-11. Print first-run notes:
+6. Git user.name / user.email for commits inside the container — defaults to the host's `git config --global` values, press Enter to accept, blank to skip
+7. Default workspace directory [$PWD] — press Enter for current directory
+8. Write .env
+9. Build Docker image (docker compose build with correct GID arg)
+10. [aihero only] Run plugin install one-off container to seed .home/
+11. Print alias to add to ~/.bash_aliases
+12. Print first-run notes:
     - SSO: "Look for a URL in the terminal — open it in your host browser"
     - All: "Approve the TELUS managed settings dialog — happens once per profile"
 ```
@@ -304,7 +306,7 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - [x] Add `--reset`, `--help`, `--version` flags to `claude.sh`
 - [x] Add `VERSION` file; `--version` reads from it
 
-#### Phase 1 testing — IN PROGRESS
+#### Phase 1 testing — COMPLETE
 - [x] vanilla profile setup flow works end-to-end (tested fresh reset + re-setup)
 - [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; `claude-sonnet-5` confirmed available on TELUS FuelIX
 - [x] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`) — works; URL printed to terminal, paste into host browser; Claude Enterprise with Opus 5 available
@@ -312,6 +314,12 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - [x] `--model=non-exist` flag passthrough confirmed — FuelIX 403 surfaced cleanly in Claude Code UI
 - [x] Test aihero profile setup end-to-end — git clone install works; 35 skills installed, container launches cleanly (tested 2026-08-15)
 - [x] Dogfood aihero profile — `/wayfinder` skill worked; discovered `gh` CLI missing; `gh` added to all 3 Dockerfiles (2026-08-15)
+- [x] Ran `/wayfinder` a second time (2026-08-15) to configure `docs/agents/` (local-markdown tracker, default triage labels, single-context domain docs) and this repo's own `CLAUDE.md` — needed for any engineering skill, not just aihero's
+
+**Stabilization pass (2026-08-15, session 4) — all 3 images verified with `gh`:**
+- `claude-code:base` (used by `vanilla` and `aihero`) was already rebuilt as of this session — `gh --version` confirmed working from inside a running container
+- `claude-code:omc` was stale (built before the `gh` Dockerfile change) — rebuilt via `docker compose -f profiles/omc/docker-compose.yml build`; `gh version 2.97.0` confirmed via `docker run --rm --entrypoint gh claude-code:omc --version` (bare `docker run ... gh --version` doesn't work — the image's `ENTRYPOINT` is `claude`, so args get swallowed by the `claude` binary, same gotcha noted below for `node`)
+- Re-verified the three accepted risks from the Docker socket + skip-permissions review still hold, now that `gh` exists and all profiles have been through at least one full setup+test pass: Docker socket mount (telemetry threat model, not container-escape), `--dangerously-skip-permissions` in `ENTRYPOINT` (container is the sandbox), telemetry soft-block (no `OTEL_*` env vars passed) — no noise observed across any of the apikey/SSO/omc/aihero test sessions to date. No changes needed.
 
 #### Setup flow fixes applied during testing
 - `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
@@ -362,8 +370,11 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - ~~Docker socket + skip-permissions design review~~ — accepted risk (threat model is org hooks, not malicious Claude); `--dangerously-skip-permissions` kept in ENTRYPOINT; dead `"permissions"` block removed from seeded settings.json
 - ~~`gh` CLI missing from Dockerfiles~~ — added to all 3 via GitHub CLI apt repo (discovered during aihero dogfood session)
 
+**Fixed (2026-08-15, session 4):**
+- ~~Rebuild images~~ — `claude-code:base` (vanilla, aihero) was already current; `claude-code:omc` was stale and has been rebuilt. All 3 profile images now have `gh`.
+
 **Pending for next session:**
-- **Rebuild images** — Dockerfiles changed (added `gh`); existing cached images don't have it. Run `./claude.sh --reset` and redo setup, or `docker compose -f profiles/<name>/docker-compose.yml build` directly.
+- None — Phase 1 is stable across all 3 profiles. Next up is Phase 4 (MCP servers), starting with Jira/Confluence and AWS scoping, and a scope call on whether Laravel Boost is still wanted.
 
 ---
 
