@@ -1,0 +1,411 @@
+# Claude-Docker Handoff
+
+## Goal
+
+Run Claude Code entirely inside Docker to isolate the host OS from org-managed hooks.
+Claude Code is **not** installed on the host OS. The container is the sandbox.
+
+## Threat Model
+
+TELUS org-managed settings (`remote-settings.json`) inject three things into every Claude Code client:
+
+1. **Hook 1** — runs a shell command every 4 min (OAuth token refresh for OTLP telemetry)
+2. **Hook 2** — writes `~/.claude/claude-repo-tag.sh` and appends a `source` line to `~/.zshrc`, `~/.bashrc`, `~/.bash_profile` — persists after Claude exits, wraps the `claude` binary
+3. **Telemetry** — sends metrics + repo name to `https://apigw-pr.telus.com/common/cioOtelCollector/v1`
+
+**What Docker solves:**
+- Hook 1 runs inside the container — arbitrary execution is contained ✓
+- Hook 2 writes to `/home/marc/.zshrc` *inside the container* → lands in `.home/.zshrc`, host shell rc files untouched ✓
+- Docker socket is acceptable: hooks are doing telemetry, not container escapes ✓
+
+**Accepted / not solved:**
+- Telemetry still makes network calls out of the container (accepted by user)
+- Org managed settings still apply inside container; approval dialog appears once per fresh `.home/` (expected)
+
+---
+
+## Repository Structure
+
+One repo (`claude-docker`), profiles as subdirectories on `main`. No long-lived branches. No separate repos per profile.
+
+```
+claude-docker/
+  claude.sh               ← single entry point, reads .claude-profile, dispatches
+  .env.example            ← documents .env schema, committed
+  .gitignore              ← .env, .claude-profile, .home*/
+  profiles/
+    omc/
+      Dockerfile          ← npm install -g oh-my-claudecode
+      docker-compose.yml  ← image: claude-code:omc
+      setup.sh            ← first-run: build image, seed .home/, prompt user
+    aihero/
+      Dockerfile          ← same base, no extra npm (aihero is config-layer)
+      docker-compose.yml  ← image: claude-code:base
+      setup.sh            ← build image, run plugin install one-off, prompt user
+    vanilla/
+      Dockerfile          ← no extras
+      docker-compose.yml  ← image: claude-code:base
+      setup.sh            ← build image, prompt user
+```
+
+**Two Docker images only:**
+- `claude-code:omc` — has `oh-my-claudecode` npm package (needs OS-level hooks)
+- `claude-code:base` — no extras (used by both `vanilla` and `aihero`)
+
+**Why aihero doesn't need its own image:** `claude plugins install mattpocock-skills` writes Markdown skill files into `~/.claude/` (the config layer), not into npm global bin. It runs once inside the container during `setup.sh` and persists in `.home/`.
+
+**To try a different profile:** clone the repo to a new directory, run `./claude.sh` to trigger `init()`. Each checkout is independent with its own `.home/` and `.env`.
+
+---
+
+## Key Design Decisions
+
+### Profile selection — locked in per checkout
+
+`init()` in `claude.sh` runs when `.claude-profile` doesn't exist:
+1. Lists `profiles/*/` directories
+2. Prompts user to pick one
+3. Writes selected profile name to `.claude-profile` (gitignored)
+4. Dispatches to `profiles/<name>/setup.sh`
+
+Once selected, the profile is fixed for that checkout. No `--profile` override flag — that would contaminate `.home/` state. To try another profile: clone again.
+
+**Note:** `.claude-profile` not `.profile` — `.profile` is a reserved Unix shell init filename.
+
+### Auth modes — `--auth=sso|apikey`
+
+| Flag | Auth method | Models | Limit |
+|---|---|---|---|
+| `--auth=sso` | OAuth via claude.ai (credentials in `.home/`) | Newer (Sonnet 4.x, Opus) | $200/month |
+| `--auth=apikey` | `ANTHROPIC_API_KEY` via FuelIX gateway | Older (Sonnet 3.x) | Unlimited |
+
+Auth mode and profile are **orthogonal** — any combination is valid. No automatic fallback between modes. Default auth read from `DEFAULT_AUTH` in `.env`.
+
+### Home directory isolation — `.home/`
+
+Mount `.home/` (per-checkout, gitignored) as `/home/marc/` (entire home, not just `.claude`).
+
+This means all hook-written files land in `.home/`:
+- `.home/.claude/` → OAuth token, `remote-settings.json`, memories
+- `.home/.zshrc` → hook 2 writes here, not to host `~/.zshrc`
+- `.home/.claude.json` → legacy auth file
+
+Each profile has its own `.home/` (e.g., `.home-omc/`, `.home-aihero/` if multiple checkouts exist — but conventionally just `.home/` since profiles are separate checkouts).
+
+### Working directory — `CLAUDE_WORKDIR`
+
+`claude.sh` reads `CLAUDE_WORKDIR` from `.env`. Falls back to `$PWD` if unset.
+
+Mount: `-v "$WORKDIR:$WORKDIR"` (same path both sides — host path = container path, no translation needed).
+
+Container starting directory: `$PWD` if inside `$WORKDIR`, otherwise `$WORKDIR` itself.
+
+```bash
+WORKDIR="${CLAUDE_WORKDIR:-$(pwd)}"
+if [[ "$PWD" == "$WORKDIR"* ]]; then
+    CONTAINERDIR="$PWD"
+else
+    CONTAINERDIR="$WORKDIR"
+fi
+```
+
+Developer alias stays minimal — workspace path lives in `.env`, not the alias.
+
+### SSH keys
+
+Optional volume mount. `setup.sh` prompts: "SSH key directory [~/.ssh] — press Enter to skip."
+
+Answer stored as `SSH_DIR` in `.env`. `claude.sh` adds `-v "$SSH_DIR:/home/marc/.ssh:ro"` only if `SSH_DIR` is non-empty.
+
+### Docker GID portability
+
+Current Dockerfile hardcodes `groupadd -g 984 docker`. This breaks on machines with a different docker group GID.
+
+Fix in `claude.sh`:
+```bash
+case "$(uname -s)" in
+  Linux*)  DOCKER_GID=$(getent group docker | cut -d: -f3 2>/dev/null || echo "984") ;;
+  Darwin*) DOCKER_GID="" ;;  # Docker Desktop handles socket permissions via its own proxy
+esac
+```
+
+Pass `DOCKER_GID` as a build arg and at runtime via `--group-add`. Skip entirely on macOS.
+
+### Argument passthrough to Claude
+
+`claude.sh` parses its own flags (`--auth`) and passes everything else to the claude binary:
+
+```bash
+AUTH="${DEFAULT_AUTH:-sso}"
+CLAUDE_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --auth=*) AUTH="${1#--auth=}"; shift ;;
+        --auth)   AUTH="$2"; shift 2 ;;
+        --)       shift; CLAUDE_ARGS+=("$@"); break ;;
+        *)        CLAUDE_ARGS+=("$1"); shift ;;
+    esac
+done
+```
+
+So `./claude.sh --auth=sso --continue` works. `--` available for disambiguation if future flag collisions arise.
+
+---
+
+## `.env` Schema
+
+```bash
+# Auth
+DEFAULT_AUTH=sso                     # sso or apikey
+ANTHROPIC_API_KEY=                   # required for --auth=apikey, optional otherwise
+ANTHROPIC_BASE_URL=                  # optional, FuelIX gateway URL
+
+# Mounts
+SSH_DIR=~/.ssh                       # SSH key directory; blank = no SSH mount
+CLAUDE_WORKDIR=                      # workspace root; blank = use $PWD at runtime
+```
+
+`setup.sh` writes `.env` interactively. `.env.example` is committed with placeholders.
+
+---
+
+## `setup.sh` Prompt Flow
+
+Runs once per checkout via `init()`. Per-profile `setup.sh` in `profiles/<name>/`:
+
+```
+1. Detect OS → linux | macos | wsl (affects GID logic and printed notes)
+2. Default auth mode? [sso/apikey] (default: sso)
+3. ANTHROPIC_API_KEY — press Enter to skip (required only if apikey)
+4. ANTHROPIC_BASE_URL — press Enter for api.anthropic.com
+5. SSH key directory [~/.ssh] — press Enter to skip (no git push from container)
+6. Default workspace directory [$PWD] — press Enter for current directory
+7. Write .env
+8. Build Docker image (docker compose build with correct GID arg)
+9. [aihero only] Run plugin install one-off container to seed .home/
+10. Print alias to add to ~/.bash_aliases
+11. Print first-run notes:
+    - SSO: "Look for a URL in the terminal — open it in your host browser"
+    - All: "Approve the TELUS managed settings dialog — happens once per profile"
+```
+
+**Suggested alias (user adds to `~/.bash_aliases`):**
+```bash
+alias claude='/path/to/claude-docker/claude.sh'
+# With explicit auth default:
+alias claude='/path/to/claude-docker/claude.sh --auth=sso'
+```
+
+All workspace/SSH config lives in `.env` — alias stays minimal.
+
+---
+
+## macOS / WSL Notes
+
+**macOS (Docker Desktop):**
+- No `getent` — skip docker group GID logic entirely
+- Docker Desktop handles socket permissions via its own proxy — no `group_add` needed
+- SSH keys at `~/.ssh` work normally
+- File paths differ (`/Users/username/...`) — handled by `CLAUDE_WORKDIR` in `.env`
+
+**Windows (Docker Desktop + WSL2):**
+- Run `claude.sh` from inside the WSL2 terminal, not PowerShell/CMD
+- SSH keys should be the WSL `~/.ssh`, not the Windows `%USERPROFILE%\.ssh`
+- Otherwise behaves identically to Linux
+- `setup.sh` prints a warning if it detects a non-WSL Windows environment
+
+---
+
+## `claude.sh` Structure (root entry point)
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROFILE_FILE="$REPO_DIR/.claude-profile"
+
+# First run: init
+if [[ ! -f "$PROFILE_FILE" ]]; then
+    init   # list profiles, prompt, write .claude-profile, dispatch to setup.sh
+    exit 0
+fi
+
+PROFILE=$(cat "$PROFILE_FILE")
+PROFILE_DIR="$REPO_DIR/profiles/$PROFILE"
+ENV_FILE="$REPO_DIR/.env"
+
+# Load .env
+[[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+
+# Parse claude.sh flags, pass rest to claude
+AUTH="${DEFAULT_AUTH:-sso}"
+CLAUDE_ARGS=()
+# ... (arg parsing loop as above)
+
+# Resolve workdir
+WORKDIR="${CLAUDE_WORKDIR:-$(pwd)}"
+# ... (CONTAINERDIR logic)
+
+# Build docker args
+DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
+DOCKER_ARGS+=(-v "$WORKDIR:$WORKDIR")
+DOCKER_ARGS+=(-v "$REPO_DIR/.home:/home/marc")
+[[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:/home/marc/.ssh:ro")
+
+if [[ "$AUTH" == "apikey" ]]; then
+    [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set in .env"; exit 1; }
+    DOCKER_ARGS+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+    [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
+fi
+
+exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" claude "${CLAUDE_ARGS[@]}"
+```
+
+---
+
+## Implementation Checklist
+
+### Phase 1 — Core setup (implement + manually test)
+
+#### Carry forward from previous session
+- [ ] Delete `/work/projects/Claude-Docker/` after porting `.env.example` and useful logic from `claude-docker.sh`
+- [ ] Update `.gitignore` to exclude `.env`, `.claude-profile`, `.home*/`
+
+#### New work
+- [ ] Create `profiles/omc/`, `profiles/aihero/`, `profiles/vanilla/` with Dockerfile, docker-compose.yml, setup.sh each
+- [ ] Move existing `Dockerfile` + `docker-compose.yml` into `profiles/omc/`; update image name to `claude-code:omc`
+- [ ] Fix `docker-compose.yml` build context: `context: ../..`, `dockerfile: profiles/omc/Dockerfile`
+- [ ] Rewrite root `claude.sh` with `init()`, arg parsing, `.claude-profile` dispatch
+- [ ] Write `profiles/*/setup.sh` with full prompt flow (OS detect, auth, API key, SSH, workdir, build, alias print)
+- [ ] Fix Docker GID: build arg + runtime `--group-add`, skip on macOS
+- [ ] Write `.env.example` with all keys documented
+- [ ] Seed `.home/.claude/settings.json` from `setup.sh` (see Seeded Settings below)
+- [ ] Seed `.home/.claude/CLAUDE.md` from `setup.sh` for omc profile only (copy from `~/.claude/CLAUDE.md`)
+- [ ] Test apikey/FuelIX flow (primary path — SSO is untested on this machine)
+- [ ] Test SSO flow: `BROWSER=echo` — does claude print a URL or open a browser?
+- [ ] Test aihero plugin install one-off container in `setup.sh`
+
+---
+
+## Seeded Settings (written by `setup.sh` into `.home/.claude/settings.json`)
+
+Auth tokens must **never** appear here — injected by Docker `-e` only.
+
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "claude-sonnet-4-6",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": []
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "alwaysThinkingEnabled": true,
+  "spinnerTipsEnabled": true,
+  "theme": "dark",
+  "enabledPlugins": {
+    "oh-my-claudecode@omc": true
+  },
+  "extraKnownMarketplaces": {
+    "omc": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/Yeachan-Heo/oh-my-claudecode.git"
+      }
+    }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
+  }
+}
+```
+
+`enabledPlugins` and `extraKnownMarketplaces` only in `omc` profile's seeded settings.json.
+`statusLine` only in `omc` profile.
+
+---
+
+## Auth injection (`claude.sh`)
+
+```bash
+if [[ "$AUTH" == "apikey" ]]; then
+    [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set"; exit 1; }
+    DOCKER_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_API_KEY")
+    [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
+fi
+# SSO: no auth env vars passed — Claude uses OAuth from .home/.claude.json
+```
+
+Note: current host setup uses FuelIX (apikey mode) via `settings.json` env block. SSO is an
+untested path. In the container, settings.json never contains auth tokens — Docker env vars only.
+
+---
+
+## Telemetry Decision
+
+**Option A chosen (soft):** Do not pass `OTEL_*` env vars (`OTEL_CLIENT_ID`, `OTEL_CLIENT_SECRET`,
+`OTEL_TOKEN_ENDPOINT`, `OTEL_SCOPE`) to the container. The `get-otel-token.sh` hook (injected by
+remote-settings) will run, find no credentials, and exit silently with `{}`. Telemetry calls may
+still attempt to reach `https://apigw-pr.telus.com/...` but without a valid auth token.
+
+If this proves noisy, escalate to Option B: add `--add-host apigw-pr.telus.com:0.0.0.0` to
+`claude.sh`'s DOCKER_ARGS to hard-block the hostname inside the container.
+
+---
+
+## Phase 2 — MCP Servers (deferred)
+
+Design is partially resolved. Implement after Phase 1 is stable.
+
+### Confluence (already Docker-based)
+- Current host config (`mcp.json.TH1.OLD`): `docker exec -i confluence-mcp-server python confluence-server.py`
+- Approach: identical inside the container — Docker socket is mounted, so `docker exec` to a running host container works
+- Requires `confluence-mcp-server` container to be running on the host before launching claude-docker
+- No Dockerfile changes needed
+
+### GitHub
+- Install `gh` CLI in Dockerfile for git operations and shell use
+- Auth: `gh auth login` inside container once; config persists in `.home/.config/gh/`
+- SSO note: TELUS Health uses SAML SSO on `github.com` — after `gh auth login`, run
+  `gh auth refresh -s read:org` and authorize in GitHub UI
+- MCP server (`@modelcontextprotocol/server-github`): optional, for structured Claude tool access
+  (read/create PRs, issues). Requires a SSO-authorized PAT (classic PAT → GitHub org settings → Authorize)
+  Token goes in `.env` as `GITHUB_TOKEN`, injected via `-e`
+
+### Slack
+- Server: `@modelcontextprotocol/server-slack` (npm, stdio)
+- Install: `npm install -g @modelcontextprotocol/server-slack` in Dockerfile
+- Auth: `SLACK_BOT_TOKEN` in `.env`, injected via `-e`
+
+### Jira / Confluence (Atlassian)
+- Separate from the Docker-exec Confluence MCP above
+- TBD: evaluate available npm/Python MCP servers for Jira
+- May require Atlassian API token in `.env`
+
+### AWS
+- Credentials: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` in `.env`
+  or mount `~/.aws/` into container
+- OpenVPN: required for RDS access — evaluate whether VPN runs on host (container inherits
+  host network routes if `--network host`) or inside container (complex, not recommended)
+- RDS MySQL: connection strings per environment in `.env` or a secrets manager
+- MCP server: `awslabs/mcp` collection — TBD which servers are needed
+- Recommended: run VPN on host, container inherits routes via bridge networking
+
+### Laravel Boost
+- TBD: determine package name, install method (npm/pip/custom), auth requirements
+
+---
+
+## Notes
+- `--dangerously-skip-permissions` in ENTRYPOINT is intentional: container is the sandbox
+- Docker socket is mounted; acceptable given threat model (hooks do telemetry, not container escapes)
+- `marc` user in container matches host uid 1000 — file ownership on mounted `/work/projects` is correct
+- First run of a new profile shows TELUS managed settings approval dialog — approve once;
+  consent saved to `.home/.claude/remote-settings-consent.json`, not shown again
+- `ANTHROPIC_AUTH_TOKEN` (FuelIX key) was previously hardcoded in host `settings.json` env block —
+  this is the pattern to avoid in the container; all auth comes from `.env` → Docker `-e`

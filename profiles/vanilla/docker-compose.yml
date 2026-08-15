@@ -1,0 +1,22 @@
+services:
+  claude:
+    build:
+      context: ../..
+      dockerfile: profiles/vanilla/Dockerfile
+      args:
+        DOCKER_GID: ${DOCKER_GID:-984}
+    image: claude-code:base
+    stdin_open: true
+    tty: true
+    environment:
+      - HOME=/home/marc
+      - BROWSER=echo
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    cpus: 1.5
+    pids_limit: 256
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
