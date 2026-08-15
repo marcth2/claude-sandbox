@@ -182,6 +182,15 @@ init() {
         printf "  %-20s %s\n" "Default Workspace:" "\$PWD at runtime"
     fi
     [[ -n "${SSH_DIR:-}" ]] && printf "  %-20s %s\n" "SSH keys:" "$SSH_DIR"
+    local gitconfig="$REPO_DIR/.home/.gitconfig"
+    if [[ -f "$gitconfig" ]]; then
+        local git_name git_email
+        git_name=$(git config --file "$gitconfig" user.name 2>/dev/null || echo "")
+        git_email=$(git config --file "$gitconfig" user.email 2>/dev/null || echo "")
+        [[ -n "$git_name" || -n "$git_email" ]] && printf "  %-20s %s\n" "Git identity:" "$git_name <$git_email>"
+    else
+        printf "  %-20s %s\n" "Git identity:" "(not set — commits inside container will fail until configured)"
+    fi
     if [[ "${DEFAULT_AUTH:-apikey}" == "sso" ]]; then
         echo ""
         echo "First-run notes:"

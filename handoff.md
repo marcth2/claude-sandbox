@@ -373,8 +373,14 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 **Fixed (2026-08-15, session 4):**
 - ~~Rebuild images~~ — `claude-code:base` (vanilla, aihero) was already current; `claude-code:omc` was stale and has been rebuilt. All 3 profile images now have `gh`.
 
+**Fixed (2026-08-15, session 5 — pre-Phase-2 cleanup):**
+- ~~Git identity prompt required retyping the default~~ — `common_prompt_git()` in `profiles/_common.sh` now pre-fills `user.name`/`user.email` via `read -e -i` (editable, same pattern as SSH/workdir tab-completion) instead of only showing the default in brackets
+- ~~No way to actually skip git identity once a host default existed~~ — clearing the pre-filled line now skips for real; previously "(Enter to skip)" was misleading since Enter accepted the default
+- ~~Git identity always prompted even when host config was complete~~ — when both `git config --global user.name` and `user.email` are set, setup now assumes them silently (one-line confirmation echo) and only prompts for whichever is missing
+- ~~Closing summary in `claude.sh` didn't show git identity~~ — now reads `.home/.gitconfig` back (the actual artifact `setup.sh` wrote, not `.env`, since git identity was never stored there) and prints `Git identity: Name <email>`, or a warning that commits will fail if it was skipped
+
 **Pending for next session:**
-- None — Phase 1 is stable across all 3 profiles. Next up is Phase 4 (MCP servers), starting with Jira/Confluence and AWS scoping, and a scope call on whether Laravel Boost is still wanted.
+- None — Phase 1 is stable across all 3 profiles. Next up is Phase 2 (architectural review via OMC/aihero dogfooding), then Phase 4 (MCP servers: Jira/Confluence and AWS scoping, Laravel Boost scope deferred until other Phase 4 servers are further along).
 
 ---
 

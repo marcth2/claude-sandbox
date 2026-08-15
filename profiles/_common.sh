@@ -110,12 +110,17 @@ common_prompt_git() {
     host_name=$(git config --global user.name 2>/dev/null || echo "")
     host_email=$(git config --global user.email 2>/dev/null || echo "")
 
-    read -rep "Git user.name for commits inside the container${host_name:+ [$host_name]} (Enter to skip): " GIT_USER_NAME
-    GIT_USER_NAME="${GIT_USER_NAME:-$host_name}"
+    if [[ -n "$host_name" && -n "$host_email" ]]; then
+        GIT_USER_NAME="$host_name"
+        GIT_USER_EMAIL="$host_email"
+        echo "Git identity for commits inside the container: $GIT_USER_NAME <$GIT_USER_EMAIL> (from host git config)"
+        return
+    fi
+
+    read -e -r -i "$host_name" -p "Git user.name for commits inside the container (clear to skip): " GIT_USER_NAME
 
     if [[ -n "$GIT_USER_NAME" ]]; then
-        read -rep "Git user.email${host_email:+ [$host_email]}: " GIT_USER_EMAIL
-        GIT_USER_EMAIL="${GIT_USER_EMAIL:-$host_email}"
+        read -e -r -i "$host_email" -p "Git user.email: " GIT_USER_EMAIL
     else
         GIT_USER_EMAIL=""
     fi
