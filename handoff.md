@@ -169,7 +169,7 @@ So `./claude.sh --auth=sso --continue` works. `--` available for disambiguation 
 
 ```bash
 # Auth
-DEFAULT_AUTH=sso                     # sso or apikey
+DEFAULT_AUTH=apikey                  # sso or apikey (default: apikey — unlimited via FuelIX)
 ANTHROPIC_API_KEY=                   # required for --auth=apikey, optional otherwise
 ANTHROPIC_BASE_URL=                  # optional, FuelIX gateway URL
 
@@ -300,23 +300,27 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 
 #### Phase 1 testing — IN PROGRESS
 - [x] vanilla profile setup flow works end-to-end (tested fresh reset + re-setup)
-- [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; Sonnet 5 available, Opus 5 not licensed on TELUS FuelIX account
+- [x] Test apikey/FuelIX auth flow (`--auth=apikey`) — works; `claude-sonnet-4-6` confirmed available on TELUS FuelIX
 - [x] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`) — works; URL printed to terminal, paste into host browser; Claude Enterprise with Opus 5 available
-- [ ] Test omc profile setup (CLAUDE.md copy, omc settings.json)
+- [ ] Test omc profile setup end-to-end with model pin (CLAUDE.md copy, .omc-config.json seed, ANTHROPIC_MODEL injected)
 - [ ] Test aihero plugin install one-off container in `setup.sh`
 
 #### Setup flow fixes applied during testing
 - `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
 - API key prompt now silent (`read -rs`) — was visible in terminal
-- ANTHROPIC_BASE_URL prompt replaced with numbered menu (1=api.anthropic.com, 2=FuelIX, 3=other/skip)
+- ANTHROPIC_BASE_URL prompt replaced with numbered menu; FuelIX is now default (option 2)
 - API key prompt skipped when BASE_URL is blank (no gateway = no key needed)
-- SSH directory defaults to `~/.ssh`; type `skip` to omit mount
+- SSH directory defaults to `~/.ssh`; type `skip` to omit mount; `read -e` added for tab completion on SSH and workspace prompts
 - Workspace directory default removed — was showing caller's `$PWD` which is too narrow; now blank (falls back to `$PWD` at runtime)
-- Alias printed without `--auth` flag — auth default lives in `.env`
+- Alias printed without `--auth` flag — auth default lives in `.env`; default changed from `sso` to `apikey`
 - `exec docker run` bug fixed — `DOCKER_ARGS` already starts with `run`; was launching image named `run`; fixed to `exec docker`
 - `--workdir=<path>` flag added to `claude.sh` for per-invocation working directory override (priority: flag > CLAUDE_WORKDIR in .env > $PWD)
-- `ANTHROPIC_MODEL` removed from seeded `settings.json` — SSO gets org default (Sonnet 5), FuelIX selects its own default without a pin; no model hardcoding anywhere
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` added to apikey Docker `-e` inject — FuelIX needs it as a real env var, not just in settings.json
+- Image existence check added to `claude.sh` — gives clear error + reset instructions if setup was interrupted before image build
+- TELUS managed settings dialog note moved inside SSO block — dialog only appears on SSO, not apikey
+- `.omc-config.json` pre-seeded in omc `setup.sh` — prevents OMC from launching interactive setup wizard (which requests opus) on first launch
+- `ANTHROPIC_MODEL` added to `.env` — set during setup via curl `/v1/models` enumeration; FuelIX exposes `claude-sonnet-4-6` as primary Claude model; injected into container via `-e`; fallback default `claude-sonnet-4-6` if curl fails
+- `--model=<id>` flag added to `claude.sh` — per-invocation override of `ANTHROPIC_MODEL` (priority: flag > .env > unset)
 
 ---
 
@@ -370,11 +374,31 @@ if [[ "$AUTH" == "apikey" ]]; then
     DOCKER_ARGS+=(-e "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 fi
 # SSO: no auth env vars passed — Claude uses OAuth from .home/.claude.json
+
+# Model (both auth modes — --model flag overrides .env)
+EFFECTIVE_MODEL="${MODEL_OVERRIDE:-${ANTHROPIC_MODEL:-}}"
+[[ -n "$EFFECTIVE_MODEL" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_MODEL=$EFFECTIVE_MODEL")
 ```
 
-`ANTHROPIC_MODEL` is NOT injected — both FuelIX and SSO select a sensible default without it
-(FuelIX → Sonnet 5, SSO → org default Sonnet 5). In the container, settings.json never contains
-auth tokens — Docker env vars only.
+`ANTHROPIC_MODEL` is set during setup by enumerating `/v1/models` from the gateway and stored in `.env`.
+In the container, settings.json never contains auth tokens — Docker env vars only.
+
+### FuelIX model findings
+
+FuelIX `/v1/models` does **not** expose `claude-opus-5` or any opus model. The Claude models available
+on the TELUS FuelIX account as of 2026-08-15:
+
+- `claude-sonnet-4-6` ← **recommended default**
+- `claude-sonnet-5`, `claude-sonnet-4-5`, `claude-sonnet-4`, `claude-3-7-sonnet`
+- `claude-haiku-4-5`, `claude-haiku-4`, `claude-3-5-haiku`
+
+The "Opus 5" shown in Claude Code's welcome screen when no model is pinned is a UI default label —
+any explicit request for `claude-opus-5` gets a 403. Pinning `ANTHROPIC_MODEL=claude-sonnet-4-6`
+prevents OMC subagents (which request opus by model name) from hitting this 403.
+
+OMC's MODEL ROUTING OVERRIDE hook detects FuelIX via `ANTHROPIC_BASE_URL` not containing `anthropic.com`
+and injects a system reminder telling Claude not to pass explicit model params to subagents — subagents
+then inherit the session model (`claude-sonnet-4-6`) instead of requesting opus.
 
 **Auth modes tested:**
 - `--auth=apikey` (FuelIX): Sonnet 5 available, Opus 5 not licensed on TELUS FuelIX account → "API Usage Billing"

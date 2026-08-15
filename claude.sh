@@ -14,6 +14,7 @@ Usage: claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
 
 Options:
   --auth=sso|apikey   Override default auth mode from .env
+  --model=<id>        Override ANTHROPIC_MODEL for this invocation
   --workdir=<path>    Override working directory for this invocation
   --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
   --help              Show this help and exit
@@ -104,14 +105,17 @@ ENV_FILE="$REPO_DIR/.env"
 
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
 
-AUTH="${DEFAULT_AUTH:-sso}"
+AUTH="${DEFAULT_AUTH:-apikey}"
 WORKDIR_OVERRIDE=""
+MODEL_OVERRIDE=""
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --auth=*)    AUTH="${1#--auth=}"; shift ;;
         --auth)      AUTH="$2"; shift 2 ;;
+        --model=*)   MODEL_OVERRIDE="${1#--model=}"; shift ;;
+        --model)     MODEL_OVERRIDE="$2"; shift 2 ;;
         --workdir=*) WORKDIR_OVERRIDE="${1#--workdir=}"; shift ;;
         --workdir)   WORKDIR_OVERRIDE="$2"; shift 2 ;;
         --reset)     do_reset ;;
@@ -163,5 +167,18 @@ if [[ "$AUTH" == "apikey" ]]; then
     DOCKER_ARGS+=(-e "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 fi
 # SSO: no auth env vars — Claude uses OAuth from .home/.claude.json
+
+# Model override: --model flag takes priority over ANTHROPIC_MODEL in .env
+EFFECTIVE_MODEL="${MODEL_OVERRIDE:-${ANTHROPIC_MODEL:-}}"
+[[ -n "$EFFECTIVE_MODEL" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_MODEL=$EFFECTIVE_MODEL")
+
+# Verify image exists — if not, setup was likely interrupted
+if ! docker image inspect "$IMAGE" &>/dev/null; then
+    echo "Error: Docker image '$IMAGE' not found."
+    echo "Setup may have been interrupted before the build completed."
+    echo ""
+    echo "Run: ./claude.sh --reset  (then re-run ./claude.sh to redo setup)"
+    exit 1
+fi
 
 exec docker "${DOCKER_ARGS[@]}" "$IMAGE" "${CLAUDE_ARGS[@]}"

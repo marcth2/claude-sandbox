@@ -29,15 +29,15 @@ case "$OS" in
 esac
 echo ""
 
-read -rp "Default auth mode [sso/apikey] (default: sso): " AUTH_MODE
-AUTH_MODE="${AUTH_MODE:-sso}"
+read -rp "Default auth mode [sso/apikey] (default: apikey): " AUTH_MODE
+AUTH_MODE="${AUTH_MODE:-apikey}"
 
 echo "ANTHROPIC_BASE_URL:"
-echo "  1) api.anthropic.com (default)"
-echo "  2) https://api.fuelix.ai"
+echo "  1) api.anthropic.com"
+echo "  2) https://api.fuelix.ai (default)"
 echo "  3) Other / skip"
-read -rp "  Choice [1]: " BASE_URL_CHOICE
-case "${BASE_URL_CHOICE:-1}" in
+read -rp "  Choice [2]: " BASE_URL_CHOICE
+case "${BASE_URL_CHOICE:-2}" in
     1) BASE_URL="https://api.anthropic.com" ;;
     2) BASE_URL="https://api.fuelix.ai" ;;
     3) read -rp "  Enter URL (press Enter to leave blank): " BASE_URL ;;
@@ -50,20 +50,57 @@ if [[ -n "$BASE_URL" ]]; then
     echo ""
 fi
 
-read -rp "SSH key directory [~/.ssh] (press Enter to use default, 'skip' to skip mount): " SSH_INPUT
+# Model selection (proxy/gateway mode only)
+ANTHROPIC_MODEL=""
+if [[ -n "$BASE_URL" && -n "$API_KEY" ]]; then
+    echo "Fetching available Claude models from $BASE_URL..."
+    CLAUDE_MODELS=()
+    while IFS= read -r model; do
+        [[ -n "$model" ]] && CLAUDE_MODELS+=("$model")
+    done < <(curl -sf "$BASE_URL/v1/models" \
+        -H "Authorization: Bearer $API_KEY" 2>/dev/null | \
+        grep -oE '"id" *: *"claude[^"]*"' | \
+        grep -oE 'claude[^"]+' | \
+        sort -r)
+
+    if [[ ${#CLAUDE_MODELS[@]} -gt 0 ]]; then
+        echo "Available Claude models:"
+        i=1
+        for m in "${CLAUDE_MODELS[@]}"; do
+            label="  $i) $m"
+            [[ "$m" == "claude-sonnet-4-6" ]] && label+=" (recommended)"
+            echo "$label"
+            ((i++))
+        done
+        echo ""
+        read -rp "Select model [press Enter to leave unset]: " model_choice
+        if [[ "$model_choice" =~ ^[0-9]+$ && "$model_choice" -ge 1 && "$model_choice" -le "${#CLAUDE_MODELS[@]}" ]]; then
+            ANTHROPIC_MODEL="${CLAUDE_MODELS[$((model_choice - 1))]}"
+            echo "Selected: $ANTHROPIC_MODEL"
+        fi
+    else
+        echo "  Could not fetch model list — enter model ID manually:"
+        read -rep "  ANTHROPIC_MODEL [claude-sonnet-4-6]: " ANTHROPIC_MODEL
+        ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+    fi
+    echo ""
+fi
+
+read -rep "SSH key directory [~/.ssh] (press Enter to use default, 'skip' to skip mount): " SSH_INPUT
 if [[ "${SSH_INPUT,,}" == "skip" ]]; then
     SSH_DIR=""
 else
     SSH_DIR="${SSH_INPUT:-$HOME/.ssh}"
 fi
 
-read -rp "Default workspace directory (press Enter to leave unset — uses \$PWD at runtime): " WORKDIR_INPUT
+read -rep "Default workspace directory (press Enter to leave unset — uses \$PWD at runtime): " WORKDIR_INPUT
 
 cat > "$ENV_FILE" <<EOF
 # Auth
 DEFAULT_AUTH=${AUTH_MODE}
 ANTHROPIC_API_KEY=${API_KEY}
 ANTHROPIC_BASE_URL=${BASE_URL}
+ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
 
 # Mounts
 SSH_DIR=${SSH_DIR}
@@ -112,6 +149,6 @@ echo ""
 echo "First-run notes:"
 if [[ "$AUTH_MODE" == "sso" ]]; then
     echo "  - SSO: Look for a URL in the terminal — open it in your host browser"
+    echo "  - Approve the TELUS managed settings dialog — happens once per fresh .home/"
 fi
-echo "  - Approve the TELUS managed settings dialog — happens once per profile"
 echo "=========================================="
