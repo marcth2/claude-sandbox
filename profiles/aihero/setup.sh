@@ -148,26 +148,22 @@ cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
   "skipWorkflowUsageWarning": true,
   "alwaysThinkingEnabled": true,
   "spinnerTipsEnabled": true,
-  "theme": "dark",
-  "extraKnownMarketplaces": {
-    "mattpocock": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/mattpocock/skills.git"
-      }
-    }
-  }
+  "theme": "dark"
 }
 SETTINGS
 echo "  settings.json written."
 
 echo ""
-echo "Installing aihero plugin (mattpocock-skills) into .home/..."
-INSTALL_ARGS=(-v "$HOME_DIR:/home/$CONTAINER_USER" -e "HOME=/home/$CONTAINER_USER")
-[[ -n "$API_KEY" ]] && INSTALL_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$API_KEY")
-[[ -n "$BASE_URL" ]] && INSTALL_ARGS+=(-e "ANTHROPIC_BASE_URL=$BASE_URL")
-docker compose -f "$PROFILE_DIR/docker-compose.yml" run --rm \
-    "${INSTALL_ARGS[@]}" \
-    claude plugins install mattpocock-skills
-echo "Plugin install complete — skills persisted in .home/.claude/"
+echo "Installing mattpocock-skills into .home/.claude/skills/..."
+SKILLS_TMP=$(mktemp -d)
+git clone --depth=1 https://github.com/mattpocock/skills.git "$SKILLS_TMP" 2>&1
+mkdir -p "$HOME_DIR/.claude/skills"
+while IFS= read -r -d '' skill_md; do
+    skill_dir="$(dirname "$skill_md")"
+    skill_name="$(basename "$skill_dir")"
+    cp -r "$skill_dir" "$HOME_DIR/.claude/skills/$skill_name"
+done < <(find "$SKILLS_TMP/skills" -name SKILL.md -not -path '*/deprecated/*' -print0)
+rm -rf "$SKILLS_TMP"
+skill_count=$(find "$HOME_DIR/.claude/skills" -mindepth 1 -maxdepth 1 -type d | wc -l)
+echo "  $skill_count skills installed to .home/.claude/skills/"
 
