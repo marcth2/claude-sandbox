@@ -95,7 +95,6 @@ mkdir -p "$HOME_DIR/.claude"
 cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {
   "env": {
-    "ANTHROPIC_MODEL": "claude-sonnet-4-6",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "permissions": {

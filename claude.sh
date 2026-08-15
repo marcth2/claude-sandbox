@@ -14,6 +14,7 @@ Usage: claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
 
 Options:
   --auth=sso|apikey   Override default auth mode from .env
+  --workdir=<path>    Override working directory for this invocation
   --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
   --help              Show this help and exit
   --version           Show claude-docker version and exit
@@ -104,21 +105,24 @@ ENV_FILE="$REPO_DIR/.env"
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
 
 AUTH="${DEFAULT_AUTH:-sso}"
+WORKDIR_OVERRIDE=""
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --auth=*) AUTH="${1#--auth=}"; shift ;;
-        --auth)   AUTH="$2"; shift 2 ;;
-        --reset)  do_reset ;;
-        --help|-h) usage; exit 0 ;;
+        --auth=*)    AUTH="${1#--auth=}"; shift ;;
+        --auth)      AUTH="$2"; shift 2 ;;
+        --workdir=*) WORKDIR_OVERRIDE="${1#--workdir=}"; shift ;;
+        --workdir)   WORKDIR_OVERRIDE="$2"; shift 2 ;;
+        --reset)     do_reset ;;
+        --help|-h)   usage; exit 0 ;;
         --version|-v) echo "claude-docker $VERSION"; exit 0 ;;
-        --)       shift; CLAUDE_ARGS+=("$@"); break ;;
-        *)        CLAUDE_ARGS+=("$1"); shift ;;
+        --)          shift; CLAUDE_ARGS+=("$@"); break ;;
+        *)           CLAUDE_ARGS+=("$1"); shift ;;
     esac
 done
 
-WORKDIR="${CLAUDE_WORKDIR:-$(pwd)}"
+WORKDIR="${WORKDIR_OVERRIDE:-${CLAUDE_WORKDIR:-$(pwd)}}"
 if [[ "$PWD" == "$WORKDIR"* ]]; then
     CONTAINERDIR="$PWD"
 else
@@ -156,7 +160,8 @@ if [[ "$AUTH" == "apikey" ]]; then
     [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set in .env"; exit 1; }
     DOCKER_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_API_KEY")
     [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
+    DOCKER_ARGS+=(-e "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")
 fi
 # SSO: no auth env vars — Claude uses OAuth from .home/.claude.json
 
-exec docker run "${DOCKER_ARGS[@]}" "$IMAGE" "${CLAUDE_ARGS[@]}"
+exec docker "${DOCKER_ARGS[@]}" "$IMAGE" "${CLAUDE_ARGS[@]}"
