@@ -311,6 +311,7 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - [x] Test omc profile setup end-to-end (CLAUDE.md copy, .omc-config.json seed, ANTHROPIC_MODEL injected, omc skills confirmed working)
 - [x] `--model=non-exist` flag passthrough confirmed — FuelIX 403 surfaced cleanly in Claude Code UI
 - [x] Test aihero profile setup end-to-end — git clone install works; 35 skills installed, container launches cleanly (tested 2026-08-15)
+- [x] Dogfood aihero profile — `/wayfinder` skill worked; discovered `gh` CLI missing; `gh` added to all 3 Dockerfiles (2026-08-15)
 
 #### Setup flow fixes applied during testing
 - `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
@@ -345,6 +346,8 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - `local -A` (bash 4+) replaced with `_profile_desc()` case function — fixes macOS bash 3.2 incompatibility
 - Profile picker now validates numeric input before array indexing — clean error message instead of raw arithmetic failure
 - `mktemp` dir in aihero setup now cleaned via `trap EXIT` — was leaking on `git clone` failure
+- `gh` CLI added to all 3 Dockerfiles — GitHub CLI apt keyring, same pattern as Docker CE; must be in Dockerfile because runtime `apt-get` fails inside hardened containers (`--cap-drop ALL` + `no-new-privileges` block privilege transitions even for root via `docker exec`)
+- `gh auth login --web` appears to freeze in container — `BROWSER=echo` prevents auto-launch; `gh` polls device auth endpoint silently; user must manually open the printed device URL; auth state persists in `.home/.config/gh/` once complete; full auth wiring deferred to Phase 4 alongside `GITHUB_TOKEN`
 
 #### Code review findings (from in-container review, 2026-08-15)
 
@@ -354,11 +357,13 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - ~~Profile picker no input validation~~ — numeric guard before array indexing
 - ~~`mktemp` leaks on `git clone` failure~~ — `trap 'rm -rf "$SKILLS_TMP"' EXIT` added
 
+**Fixed (2026-08-15, session 3):**
+- ~~`profiles/_common.sh` refactor~~ — OS detection, auth/model prompts, `.env` write, and build extracted to `profiles/_common.sh`; each setup.sh now ~30–80 lines of profile-specific code only
+- ~~Docker socket + skip-permissions design review~~ — accepted risk (threat model is org hooks, not malicious Claude); `--dangerously-skip-permissions` kept in ENTRYPOINT; dead `"permissions"` block removed from seeded settings.json
+- ~~`gh` CLI missing from Dockerfiles~~ — added to all 3 via GitHub CLI apt repo (discovered during aihero dogfood session)
+
 **Pending for next session:**
-- **Pin aihero git clone** (`profiles/aihero/setup.sh`) — add a specific commit SHA to `git clone --depth=1`; unpinned means upstream skill changes (which Claude treats as instructions) arrive silently on next setup
-- **`profiles/_common.sh` refactor** — OS detection, GID lookup, auth/model prompts, `.env` write, and settings.json seed are copy-pasted across all three setup.sh files (~150 lines); any future bugfix applies three times without this
-- **Remove dead `"permissions": {"allow": []}` config** from all seeded settings.json — `--dangerously-skip-permissions` in ENTRYPOINT bypasses the permission system before settings.json is read
-- **Docker socket + skip-permissions design review** — both together are a full host escape vector; decide: keep as accepted risk (document more explicitly) or harden ENTRYPOINT to require `--dangerously-skip-permissions` as an explicit runtime flag
+- **Rebuild images** — Dockerfiles changed (added `gh`); existing cached images don't have it. Run `./claude.sh --reset` and redo setup, or `docker compose -f profiles/<name>/docker-compose.yml build` directly.
 
 ---
 
@@ -487,13 +492,15 @@ Design is partially resolved. Implement after Phase 1 is stable.
 - No Dockerfile changes needed
 
 ### GitHub
-- Install `gh` CLI in Dockerfile for git operations and shell use
-- Auth: `gh auth login` inside container once; config persists in `.home/.config/gh/`
-- SSO note: TELUS Health uses SAML SSO on `github.com` — after `gh auth login`, run
-  `gh auth refresh -s read:org` and authorize in GitHub UI
-- MCP server (`@modelcontextprotocol/server-github`): optional, for structured Claude tool access
-  (read/create PRs, issues). Requires a SSO-authorized PAT (classic PAT → GitHub org settings → Authorize)
-  Token goes in `.env` as `GITHUB_TOKEN`, injected via `-e`
+- `gh` CLI is installed in all 3 Dockerfiles (done 2026-08-15)
+- Auth wiring: add `GITHUB_TOKEN` to `.env` (classic PAT, SSO-authorized for TELUS org); setup.sh runs
+  `gh auth login --with-token <<< "$GITHUB_TOKEN"` so CLI is configured automatically; token also
+  injected via `-e GITHUB_TOKEN` for the MCP server — one token wires both
+- SSO note: TELUS Health uses SAML SSO on `github.com` — after creating the PAT, go to
+  GitHub org settings → Authorize the token for the org
+- MCP server (`@modelcontextprotocol/server-github`): optional structured Claude tool access
+  (read/create PRs, issues); uses `GITHUB_TOKEN` env var
+- `gh auth` state persists in `.home/.config/gh/` — survives container restarts
 
 ### Slack
 - Server: `@modelcontextprotocol/server-slack` (npm, stdio)
@@ -520,6 +527,7 @@ Design is partially resolved. Implement after Phase 1 is stable.
 ---
 
 ## Notes
+- `apt-get` fails at container runtime even as root via `docker exec` — `--cap-drop ALL` + `no-new-privileges` block the privilege transitions apt needs. All packages must be installed in the Dockerfile at build time. This is expected; use `docker build` to add packages, not live installs.
 - `--dangerously-skip-permissions` in ENTRYPOINT is intentional: container is the sandbox
 - Docker socket is mounted; acceptable given threat model (hooks do telemetry, not container escapes)
 - Container user matches host user (`CONTAINER_USER/UID/GID` in `.env`) — file ownership on mounted volumes is correct regardless of who runs setup
