@@ -26,10 +26,10 @@ TELUS org-managed settings (`remote-settings.json`) inject three things into eve
 
 ## Repository Structure
 
-One repo (`claude-docker`), profiles as subdirectories on `main`. No long-lived branches. No separate repos per profile.
+One repo (`claude-sandbox`), profiles as subdirectories on `main`. No long-lived branches. No separate repos per profile.
 
 ```
-claude-docker/
+claude-sandbox/
   claude.sh               ← single entry point, reads .claude-profile, dispatches
   .env.example            ← documents .env schema, committed
   .gitignore              ← .env, .claude-profile, .home*/
@@ -204,9 +204,9 @@ Runs once per checkout via `init()`. Per-profile `setup.sh` in `profiles/<name>/
 
 **Suggested alias (user adds to `~/.bash_aliases`):**
 ```bash
-alias claude='/path/to/claude-docker/claude.sh'
+alias claude='/path/to/claude-sandbox/claude.sh'
 # With explicit auth default:
-alias claude='/path/to/claude-docker/claude.sh --auth=sso'
+alias claude='/path/to/claude-sandbox/claude.sh --auth=sso'
 ```
 
 All workspace/SSH config lives in `.env` — alias stays minimal.
@@ -453,7 +453,7 @@ Design is partially resolved. Implement after Phase 1 is stable.
 ### Confluence (already Docker-based)
 - Current host config (`mcp.json.TH1.OLD`): `docker exec -i confluence-mcp-server python confluence-server.py`
 - Approach: identical inside the container — Docker socket is mounted, so `docker exec` to a running host container works
-- Requires `confluence-mcp-server` container to be running on the host before launching claude-docker
+- Requires `confluence-mcp-server` container to be running on the host before launching claude-sandbox
 - No Dockerfile changes needed
 
 ### GitHub
