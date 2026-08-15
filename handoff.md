@@ -41,7 +41,7 @@ claude-sandbox/
     aihero/
       Dockerfile          ← same base, no extra npm (aihero is config-layer)
       docker-compose.yml  ← image: claude-code:base
-      setup.sh            ← build image, run plugin install one-off, prompt user
+      setup.sh            ← build image, git clone mattpocock/skills → .home/.claude/skills/, prompt user
     vanilla/
       Dockerfile          ← no extras
       docker-compose.yml  ← image: claude-code:base
@@ -52,7 +52,7 @@ claude-sandbox/
 - `claude-code:omc` — has `oh-my-claudecode` npm package (needs OS-level hooks)
 - `claude-code:base` — no extras (used by both `vanilla` and `aihero`)
 
-**Why aihero doesn't need its own image:** `claude plugins install mattpocock-skills` writes Markdown skill files into `~/.claude/` (the config layer), not into npm global bin. It runs once inside the container during `setup.sh` and persists in `.home/`.
+**Why aihero doesn't need its own image:** The AI Hero skill pack (`mattpocock/skills`) is Markdown files in `~/.claude/skills/` — no npm binaries. During `setup.sh`, the host git-clones the repo and copies skill directories directly into `.home/.claude/skills/`. This bypasses the `claude plugins install` marketplace mechanism entirely (which fails headlessly).
 
 **To try a different profile:** clone the repo to a new directory, run `./claude.sh` to trigger `init()`. Each checkout is independent with its own `.home/` and `.env`.
 
@@ -83,7 +83,7 @@ Auth mode and profile are **orthogonal** — any combination is valid. No automa
 
 ### Home directory isolation — `.home/`
 
-Mount `.home/` (per-checkout, gitignored) as `/home/marc/` (entire home, not just `.claude`).
+Mount `.home/` (per-checkout, gitignored) as `/home/<username>/` (entire home, not just `.claude`). The container username matches the host user (`CONTAINER_USER` in `.env`), so file ownership on mounted volumes is correct on any machine.
 
 This means all hook-written files land in `.home/`:
 - `.home/.claude/` → OAuth token, `remote-settings.json`, memories
@@ -115,7 +115,7 @@ Developer alias stays minimal — workspace path lives in `.env`, not the alias.
 
 Optional volume mount. `setup.sh` prompts: "SSH key directory [~/.ssh] — press Enter to skip."
 
-Answer stored as `SSH_DIR` in `.env`. `claude.sh` adds `-v "$SSH_DIR:/home/marc/.ssh:ro"` only if `SSH_DIR` is non-empty.
+Answer stored as `SSH_DIR` in `.env`. `claude.sh` adds `-v "$SSH_DIR:$CONTAINER_HOME/.ssh:ro"` only if `SSH_DIR` is non-empty.
 
 ### Docker GID portability
 
@@ -172,6 +172,7 @@ So `./claude.sh --auth=sso --continue` works. `--` available for disambiguation 
 DEFAULT_AUTH=apikey                  # sso or apikey (default: apikey — unlimited via FuelIX)
 ANTHROPIC_API_KEY=                   # required for --auth=apikey, optional otherwise
 ANTHROPIC_BASE_URL=                  # gateway URL; default is FuelIX (api.fuelix.ai)
+ANTHROPIC_MODEL=claude-sonnet-4-6    # model ID for proxy/gateway; set by setup from /v1/models
 
 # Mounts
 SSH_DIR=~/.ssh                       # SSH key directory; blank = no SSH mount
@@ -268,8 +269,8 @@ WORKDIR="${CLAUDE_WORKDIR:-$(pwd)}"
 # Build docker args
 DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
 DOCKER_ARGS+=(-v "$WORKDIR:$WORKDIR")
-DOCKER_ARGS+=(-v "$REPO_DIR/.home:/home/marc")
-[[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:/home/marc/.ssh:ro")
+DOCKER_ARGS+=(-v "$REPO_DIR/.home:$CONTAINER_HOME")
+[[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:$CONTAINER_HOME/.ssh:ro")
 
 if [[ "$AUTH" == "apikey" ]]; then
     [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set in .env"; exit 1; }
@@ -309,7 +310,7 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - [x] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`) — works; URL printed to terminal, paste into host browser; Claude Enterprise with Opus 5 available
 - [x] Test omc profile setup end-to-end (CLAUDE.md copy, .omc-config.json seed, ANTHROPIC_MODEL injected, omc skills confirmed working)
 - [x] `--model=non-exist` flag passthrough confirmed — FuelIX 403 surfaced cleanly in Claude Code UI
-- [ ] Test aihero plugin install one-off container in `setup.sh`
+- [ ] Test aihero profile setup end-to-end — git clone skill install approach (commit `f2f1725`); not yet tested as of this handoff
 
 #### Setup flow fixes applied during testing
 - `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
@@ -337,6 +338,9 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - Container username/UID portability fix — `marc` and UID 1000 were hardcoded throughout; now all 3 Dockerfiles accept `USERNAME`, `USER_UID`, `USER_GID` build args; `setup.sh` captures `$(id -un/u/g)` at setup time, writes to `.env` as `CONTAINER_USER/UID/GID`, passes as `--build-arg`; `claude.sh` derives `CONTAINER_HOME` from `CONTAINER_USER` after sourcing `.env`; aihero plugin install path also fixed
 - `claude-docker` → `claude-sandbox` renamed in all 4 remaining instances in `claude.sh` (usage header, help text, both `--version` handlers)
 - FuelIX (`api.fuelix.ai`) promoted to default [1] in BASE_URL menu across all 3 `setup.sh` files; api.anthropic.com moved to option 2
+- Model list heading changed from `"Available Claude models:"` to `"Available models on $BASE_URL:"` — makes clear which gateway the list comes from
+- SSO path now prints `"SSO: select your model inside Claude Code with /model"` instead of silently skipping model selection
+- aihero plugin install completely replaced — `claude plugins install mattpocock-skills` fails headlessly (marketplace auth not available in container); new approach: host git-clones `mattpocock/skills` at setup time, copies skill dirs from `skills/` (excluding `deprecated/`) into `.home/.claude/skills/`; no container involvement in install
 
 ---
 
@@ -500,7 +504,7 @@ Design is partially resolved. Implement after Phase 1 is stable.
 ## Notes
 - `--dangerously-skip-permissions` in ENTRYPOINT is intentional: container is the sandbox
 - Docker socket is mounted; acceptable given threat model (hooks do telemetry, not container escapes)
-- `marc` user in container matches host uid 1000 — file ownership on mounted `/work/projects` is correct
+- Container user matches host user (`CONTAINER_USER/UID/GID` in `.env`) — file ownership on mounted volumes is correct regardless of who runs setup
 - First run of a new profile shows the org managed settings approval dialog — approve once;
   consent saved to `.home/.claude/remote-settings-consent.json`, not shown again
 - `ANTHROPIC_AUTH_TOKEN` (FuelIX key) was previously hardcoded in host `settings.json` env block —
