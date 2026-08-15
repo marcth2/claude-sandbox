@@ -159,6 +159,7 @@ echo "  settings.json written."
 echo ""
 echo "Installing mattpocock-skills into .home/.claude/skills/..."
 SKILLS_TMP=$(mktemp -d)
+trap 'rm -rf "$SKILLS_TMP"' EXIT
 git clone --depth=1 https://github.com/mattpocock/skills.git "$SKILLS_TMP" 2>&1
 mkdir -p "$HOME_DIR/.claude/skills"
 while IFS= read -r -d '' skill_md; do

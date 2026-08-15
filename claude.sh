@@ -41,17 +41,21 @@ Profile is locked per checkout. To try a different profile: clone the repo again
 EOF
 }
 
+_profile_desc() {
+    case "$1" in
+        vanilla) echo "Claude Code, no plugins — plain baseline" ;;
+        omc)     echo "Claude Code + oh-my-claudecode multi-agent orchestration" ;;
+        aihero)  echo "Claude Code + AI Hero skill pack" ;;
+        *)       echo "" ;;
+    esac
+}
+
 init() {
     echo "=== Claude Docker — First Run Setup ==="
     echo ""
 
     # Fixed display order; vanilla is the plain baseline and the default
     local ordered=(vanilla omc aihero)
-    local -A descriptions=(
-        [vanilla]="Claude Code, no plugins — plain baseline"
-        [omc]="Claude Code + oh-my-claudecode multi-agent orchestration"
-        [aihero]="Claude Code + AI Hero skill pack"
-    )
 
     local profiles=()
     echo "Available profiles:"
@@ -59,7 +63,8 @@ init() {
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
         profiles+=("$name")
-        echo "  $i) $name — ${descriptions[$name]:-}"
+        local desc; desc="$(_profile_desc "$name")"
+        echo "  $i) $name${desc:+ — $desc}"
         ((i++))
     done
     # Any unrecognized profiles not in the ordered list
@@ -74,6 +79,10 @@ init() {
     echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#profiles[@]} )); then
+        echo "Invalid selection — defaulting to 1."
+        choice=1
+    fi
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
     echo "$selected" > "$PROFILE_FILE"
@@ -117,6 +126,8 @@ init() {
         echo "  $existing_line"
         read -rp "Alias name [${existing_name}]: " alias_name
         alias_name="${alias_name:-$existing_name}"
+        alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
+        [[ -z "$alias_name" ]] && alias_name="$existing_name"
         if [[ "$alias_name" != "$existing_name" ]]; then
             sed -i "/^alias ${existing_name}=/d" "$aliases_file"
             echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >> "$aliases_file"
@@ -125,6 +136,8 @@ init() {
     else
         read -rp "Alias name [claude-sandbox]: " alias_name
         alias_name="${alias_name:-claude-sandbox}"
+        alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
+        [[ -z "$alias_name" ]] && alias_name="claude-sandbox"
         if [[ -n "$alias_name" ]]; then
             alias_line="alias ${alias_name}='${REPO_DIR}/claude.sh'"
             if grep -qE "^alias ${alias_name}=" "$aliases_file" 2>/dev/null; then
