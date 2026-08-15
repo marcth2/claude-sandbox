@@ -171,11 +171,16 @@ So `./claude.sh --auth=sso --continue` works. `--` available for disambiguation 
 # Auth
 DEFAULT_AUTH=apikey                  # sso or apikey (default: apikey — unlimited via FuelIX)
 ANTHROPIC_API_KEY=                   # required for --auth=apikey, optional otherwise
-ANTHROPIC_BASE_URL=                  # optional, FuelIX gateway URL
+ANTHROPIC_BASE_URL=                  # gateway URL; default is FuelIX (api.fuelix.ai)
 
 # Mounts
 SSH_DIR=~/.ssh                       # SSH key directory; blank = no SSH mount
 CLAUDE_WORKDIR=                      # workspace root; blank = use $PWD at runtime
+
+# Container user (set by setup.sh — do not edit manually)
+CONTAINER_USER=                      # host username at setup time (e.g. alice)
+CONTAINER_UID=                       # host uid at setup time (e.g. 1000)
+CONTAINER_GID=                       # host gid at setup time (e.g. 1000)
 ```
 
 `setup.sh` writes `.env` interactively. `.env.example` is committed with placeholders.
@@ -329,6 +334,9 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - Reset message now shows actual script path instead of hardcoded `claude-sandbox`
 - TELUS/org-specific references removed from scripts — BASE_URL menu now defaults to api.anthropic.com [1] with FueliX as option 2; "org managed settings" used in messaging
 - Phases restructured: Phase 2 = architectural review (OMC + aihero), Phase 3 = README + CLAUDE.md, Phase 4 = MCP Servers
+- Container username/UID portability fix — `marc` and UID 1000 were hardcoded throughout; now all 3 Dockerfiles accept `USERNAME`, `USER_UID`, `USER_GID` build args; `setup.sh` captures `$(id -un/u/g)` at setup time, writes to `.env` as `CONTAINER_USER/UID/GID`, passes as `--build-arg`; `claude.sh` derives `CONTAINER_HOME` from `CONTAINER_USER` after sourcing `.env`; aihero plugin install path also fixed
+- `claude-docker` → `claude-sandbox` renamed in all 4 remaining instances in `claude.sh` (usage header, help text, both `--version` handlers)
+- FuelIX (`api.fuelix.ai`) promoted to default [1] in BASE_URL menu across all 3 `setup.sh` files; api.anthropic.com moved to option 2
 
 ---
 

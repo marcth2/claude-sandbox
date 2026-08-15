@@ -29,6 +29,10 @@ case "$OS" in
         echo "macOS: Docker Desktop handles socket permissions — no GID needed."
         ;;
 esac
+
+CONTAINER_USER=$(id -un)
+CONTAINER_UID=$(id -u)
+CONTAINER_GID=$(id -g)
 echo ""
 
 # Auth mode
@@ -37,15 +41,15 @@ AUTH_MODE="${AUTH_MODE:-apikey}"
 
 # Base URL
 echo "ANTHROPIC_BASE_URL:"
-echo "  1) https://api.anthropic.com (default)"
-echo "  2) https://api.fuelix.ai (FueliX)"
+echo "  1) https://api.fuelix.ai (FueliX) (default)"
+echo "  2) https://api.anthropic.com"
 echo "  3) Other / skip"
 read -rp "  Choice [1]: " BASE_URL_CHOICE
 case "${BASE_URL_CHOICE:-1}" in
-    1) BASE_URL="https://api.anthropic.com" ;;
-    2) BASE_URL="https://api.fuelix.ai" ;;
+    1) BASE_URL="https://api.fuelix.ai" ;;
+    2) BASE_URL="https://api.anthropic.com" ;;
     3) read -rp "  Enter URL (press Enter to leave blank): " BASE_URL ;;
-    *) BASE_URL="https://api.anthropic.com" ;;
+    *) BASE_URL="https://api.fuelix.ai" ;;
 esac
 
 # API key (silent)
@@ -118,6 +122,11 @@ ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
 # Mounts
 SSH_DIR=${SSH_DIR}
 CLAUDE_WORKDIR=${WORKDIR_INPUT}
+
+# Container user (captured at setup — matches host uid/gid for correct file ownership)
+CONTAINER_USER=${CONTAINER_USER}
+CONTAINER_UID=${CONTAINER_UID}
+CONTAINER_GID=${CONTAINER_GID}
 EOF
 echo ""
 echo ".env written to $ENV_FILE"
@@ -125,8 +134,11 @@ echo ".env written to $ENV_FILE"
 # Build image
 echo ""
 echo "Building claude-code:omc image..."
-export DOCKER_GID
-docker compose -f "$PROFILE_DIR/docker-compose.yml" build
+docker compose -f "$PROFILE_DIR/docker-compose.yml" build \
+    --build-arg DOCKER_GID="${DOCKER_GID:-984}" \
+    --build-arg USERNAME="$CONTAINER_USER" \
+    --build-arg USER_UID="$CONTAINER_UID" \
+    --build-arg USER_GID="$CONTAINER_GID"
 echo "Build complete."
 
 # Seed .home/

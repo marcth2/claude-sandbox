@@ -5,11 +5,14 @@ services:
       dockerfile: profiles/vanilla/Dockerfile
       args:
         DOCKER_GID: ${DOCKER_GID:-984}
+        USERNAME: ${CONTAINER_USER:-claude}
+        USER_UID: ${CONTAINER_UID:-1000}
+        USER_GID: ${CONTAINER_GID:-1000}
     image: claude-code:base
     stdin_open: true
     tty: true
     environment:
-      - HOME=/home/marc
+      - HOME=/home/${CONTAINER_USER:-claude}
       - BROWSER=echo
     security_opt:
       - no-new-privileges:true

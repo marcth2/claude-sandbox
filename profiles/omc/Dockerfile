@@ -12,15 +12,18 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g @anthropic-ai/claude-code oh-my-claudecode
 
 ARG DOCKER_GID=984
-# node:22-slim ships a 'node' user at uid/gid 1000 — rename it to marc
-RUN groupmod -n marc node && \
-    usermod -l marc -m -d /home/marc node && \
+ARG USERNAME=claude
+ARG USER_UID=1000
+ARG USER_GID=1000
+# node:22-slim ships a 'node' user at uid/gid 1000 — rename to match the host user
+RUN groupmod -g "${USER_GID}" -n "${USERNAME}" node && \
+    usermod -l "${USERNAME}" -u "${USER_UID}" -m -d "/home/${USERNAME}" node && \
     groupadd -g "${DOCKER_GID}" docker && \
-    usermod -aG docker marc
+    usermod -aG docker "${USERNAME}"
 
-RUN mkdir -p /work/projects && chown marc:marc /work/projects
+RUN mkdir -p /work/projects && chown "${USERNAME}:${USERNAME}" /work/projects
 
-USER marc
+USER ${USERNAME}
 WORKDIR /work/projects
 
 ENTRYPOINT ["claude", "--dangerously-skip-permissions"]

@@ -5,7 +5,7 @@ set -euo pipefail
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
         echo "Error: unsupported shell environment '$(uname -s)'."
-        echo "Run claude-docker from a WSL2 terminal, not PowerShell, Git Bash, or Cygwin."
+        echo "Run claude-sandbox from a WSL2 terminal, not PowerShell, Git Bash, or Cygwin."
         exit 1
         ;;
 esac
@@ -17,7 +17,7 @@ VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo "unknown")"
 
 usage() {
     cat <<EOF
-claude-docker — Dockerized Claude Code launcher
+claude-sandbox — Dockerized Claude Code launcher
 
 Usage: claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
 
@@ -27,7 +27,7 @@ Options:
   --workdir=<path>    Override working directory for this invocation
   --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
   --help              Show this help and exit
-  --version           Show claude-docker version and exit
+  --version           Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
 
 Auth modes:
@@ -215,7 +215,7 @@ do_reset() {
 # Handle early flags before profile/env loading
 case "${1:-}" in
     --help|-h)    usage; exit 0 ;;
-    --version|-v) echo "claude-docker $VERSION"; exit 0 ;;
+    --version|-v) echo "claude-sandbox $VERSION"; exit 0 ;;
     --reset)      do_reset ;;
 esac
 
@@ -229,6 +229,8 @@ PROFILE_DIR="$REPO_DIR/profiles/$PROFILE"
 ENV_FILE="$REPO_DIR/.env"
 
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+
+CONTAINER_HOME="/home/${CONTAINER_USER:-$(id -un)}"
 
 AUTH="${DEFAULT_AUTH:-apikey}"
 WORKDIR_OVERRIDE=""
@@ -245,7 +247,7 @@ while [[ $# -gt 0 ]]; do
         --workdir)   WORKDIR_OVERRIDE="$2"; shift 2 ;;
         --reset)     do_reset ;;
         --help|-h)   usage; exit 0 ;;
-        --version|-v) echo "claude-docker $VERSION"; exit 0 ;;
+        --version|-v) echo "claude-sandbox $VERSION"; exit 0 ;;
         --)          shift; CLAUDE_ARGS+=("$@"); break ;;
         *)           CLAUDE_ARGS+=("$1"); shift ;;
     esac
@@ -273,16 +275,16 @@ esac
 
 DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
 DOCKER_ARGS+=(-v "$WORKDIR:$WORKDIR")
-DOCKER_ARGS+=(-v "$REPO_DIR/.home:/home/marc")
+DOCKER_ARGS+=(-v "$REPO_DIR/.home:$CONTAINER_HOME")
 DOCKER_ARGS+=(-v /var/run/docker.sock:/var/run/docker.sock)
-DOCKER_ARGS+=(-e HOME=/home/marc)
+DOCKER_ARGS+=(-e "HOME=$CONTAINER_HOME")
 DOCKER_ARGS+=(-e BROWSER=echo)
 DOCKER_ARGS+=(--security-opt no-new-privileges:true)
 DOCKER_ARGS+=(--cap-drop ALL)
 DOCKER_ARGS+=(--memory 2g)
 DOCKER_ARGS+=(--cpus 1.5)
 DOCKER_ARGS+=(--pids-limit 256)
-[[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:/home/marc/.ssh:ro")
+[[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:$CONTAINER_HOME/.ssh:ro")
 [[ -n "${DOCKER_GID:-}" ]] && DOCKER_ARGS+=(--group-add "$DOCKER_GID")
 
 if [[ "$AUTH" == "apikey" ]]; then
