@@ -270,22 +270,37 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 ### Phase 1 — Core setup (implement + manually test)
 
 #### Carry forward from previous session
-- [ ] Delete `/work/projects/Claude-Docker/` after porting `.env.example` and useful logic from `claude-docker.sh`
-- [ ] Update `.gitignore` to exclude `.env`, `.claude-profile`, `.home*/`
+- [x] Update `.gitignore` to exclude `.env`, `.claude-profile`, `.home*/`
+- [ ] Delete `/work/projects/Claude-Docker/` (old repo — low priority, not blocking)
 
-#### New work
-- [ ] Create `profiles/omc/`, `profiles/aihero/`, `profiles/vanilla/` with Dockerfile, docker-compose.yml, setup.sh each
-- [ ] Move existing `Dockerfile` + `docker-compose.yml` into `profiles/omc/`; update image name to `claude-code:omc`
-- [ ] Fix `docker-compose.yml` build context: `context: ../..`, `dockerfile: profiles/omc/Dockerfile`
-- [ ] Rewrite root `claude.sh` with `init()`, arg parsing, `.claude-profile` dispatch
-- [ ] Write `profiles/*/setup.sh` with full prompt flow (OS detect, auth, API key, SSH, workdir, build, alias print)
-- [ ] Fix Docker GID: build arg + runtime `--group-add`, skip on macOS
-- [ ] Write `.env.example` with all keys documented
-- [ ] Seed `.home/.claude/settings.json` from `setup.sh` (see Seeded Settings below)
-- [ ] Seed `.home/.claude/CLAUDE.md` from `setup.sh` for omc profile only (copy from `~/.claude/CLAUDE.md`)
-- [ ] Test apikey/FuelIX flow (primary path — SSO is untested on this machine)
-- [ ] Test SSO flow: `BROWSER=echo` — does claude print a URL or open a browser?
+#### New work — COMPLETE
+- [x] Create `profiles/omc/`, `profiles/aihero/`, `profiles/vanilla/` with Dockerfile, docker-compose.yml, setup.sh each
+- [x] Move existing `Dockerfile` + `docker-compose.yml` into `profiles/omc/`; update image name to `claude-code:omc`
+- [x] Fix `docker-compose.yml` build context: `context: ../..`, `dockerfile: profiles/omc/Dockerfile`
+- [x] Rewrite root `claude.sh` with `init()`, arg parsing, `.claude-profile` dispatch
+- [x] Write `profiles/*/setup.sh` with full prompt flow (OS detect, auth, API key, SSH, workdir, build, alias print)
+- [x] Fix Docker GID: build arg + runtime `--group-add` (via `docker run`, not `docker compose run` — compose doesn't support `--group-add`)
+- [x] Write `.env.example` with all keys documented
+- [x] Seed `.home/.claude/settings.json` from `setup.sh` (see Seeded Settings below)
+- [x] Seed `.home/.claude/CLAUDE.md` from `setup.sh` for omc profile only (copy from `~/.claude/CLAUDE.md`)
+- [x] Add `--reset`, `--help`, `--version` flags to `claude.sh`
+- [x] Add `VERSION` file; `--version` reads from it
+
+#### Phase 1 testing — IN PROGRESS
+- [x] vanilla profile setup flow works end-to-end
+- [ ] Test apikey/FuelIX auth flow (`--auth=apikey`)
+- [ ] Test SSO auth flow (`--auth=sso`, `BROWSER=echo`)
+- [ ] Test omc profile setup (CLAUDE.md copy, omc settings.json)
 - [ ] Test aihero plugin install one-off container in `setup.sh`
+
+#### Setup flow fixes applied during testing
+- `docker compose run` does not support `--group-add` — switched `claude.sh` to `docker run` directly; compose files retained for build only
+- API key prompt now silent (`read -rs`) — was visible in terminal
+- ANTHROPIC_BASE_URL prompt replaced with numbered menu (1=api.anthropic.com, 2=FuelIX, 3=other/skip)
+- API key prompt skipped when BASE_URL is blank (no gateway = no key needed)
+- SSH directory defaults to `~/.ssh`; type `skip` to omit mount
+- Workspace directory default removed — was showing caller's `$PWD` which is too narrow; now blank (falls back to `$PWD` at runtime)
+- Alias printed without `--auth` flag — auth default lives in `.env`
 
 ---
 

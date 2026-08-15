@@ -32,21 +32,32 @@ echo ""
 read -rp "Default auth mode [sso/apikey] (default: sso): " AUTH_MODE
 AUTH_MODE="${AUTH_MODE:-sso}"
 
-read -rp "ANTHROPIC_API_KEY (press Enter to skip): " API_KEY
+echo "ANTHROPIC_BASE_URL:"
+echo "  1) api.anthropic.com (default)"
+echo "  2) https://api.fuelix.ai"
+echo "  3) Other / skip"
+read -rp "  Choice [1]: " BASE_URL_CHOICE
+case "${BASE_URL_CHOICE:-1}" in
+    1) BASE_URL="https://api.anthropic.com" ;;
+    2) BASE_URL="https://api.fuelix.ai" ;;
+    3) read -rp "  Enter URL (press Enter to leave blank): " BASE_URL ;;
+    *) BASE_URL="https://api.anthropic.com" ;;
+esac
 
-read -rp "ANTHROPIC_BASE_URL (press Enter for api.anthropic.com): " BASE_URL
-
-SSH_DIR=""
-read -rp "SSH key directory (press Enter to skip mount): " SSH_INPUT
-if [[ -z "$SSH_INPUT" && -d "$HOME/.ssh" ]]; then
-    read -rp "  Found ~/.ssh — mount it? [y/N]: " MOUNT_SSH
-    [[ "${MOUNT_SSH,,}" == "y" ]] && SSH_DIR="$HOME/.ssh"
-elif [[ -n "$SSH_INPUT" ]]; then
-    SSH_DIR="$SSH_INPUT"
+API_KEY=""
+if [[ -n "$BASE_URL" ]]; then
+    read -rsp "ANTHROPIC_API_KEY (press Enter to skip): " API_KEY
+    echo ""
 fi
 
-read -rp "Default workspace directory [$PWD]: " WORKDIR_INPUT
-WORKDIR_INPUT="${WORKDIR_INPUT:-$PWD}"
+read -rp "SSH key directory [~/.ssh] (press Enter to use default, 'skip' to skip mount): " SSH_INPUT
+if [[ "${SSH_INPUT,,}" == "skip" ]]; then
+    SSH_DIR=""
+else
+    SSH_DIR="${SSH_INPUT:-$HOME/.ssh}"
+fi
+
+read -rp "Default workspace directory (press Enter to leave unset — uses \$PWD at runtime): " WORKDIR_INPUT
 
 cat > "$ENV_FILE" <<EOF
 # Auth
@@ -67,7 +78,6 @@ export DOCKER_GID
 docker compose -f "$PROFILE_DIR/docker-compose.yml" build
 echo "Build complete."
 
-# Seed .home/
 echo ""
 echo "Seeding .home/.claude/..."
 mkdir -p "$HOME_DIR/.claude"
@@ -90,7 +100,6 @@ cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 SETTINGS
 echo "  settings.json written."
 
-# Run aihero plugin install as a one-off container seeding .home/
 echo ""
 echo "Installing aihero plugin (mattpocock-skills) into .home/..."
 docker compose -f "$PROFILE_DIR/docker-compose.yml" run --rm \
@@ -105,10 +114,7 @@ echo "Setup complete!"
 echo ""
 echo "Add this alias to ~/.bash_aliases:"
 echo ""
-echo "  alias claude='$REPO_DIR/claude.sh'"
-echo ""
-echo "Or with explicit auth default:"
-echo "  alias claude='$REPO_DIR/claude.sh --auth=${AUTH_MODE}'"
+echo "  alias claude-sandbox='$REPO_DIR/claude.sh'"
 echo ""
 echo "Then run: source ~/.bash_aliases"
 echo ""
