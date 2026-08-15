@@ -73,7 +73,7 @@ if [[ -n "$BASE_URL" && -n "$API_KEY" ]]; then
         sort -r)
 
     if [[ ${#CLAUDE_MODELS[@]} -gt 0 ]]; then
-        echo "Available Claude models:"
+        echo "Available models on $BASE_URL:"
         default_idx=1
         i=1
         for m in "${CLAUDE_MODELS[@]}"; do
@@ -98,6 +98,9 @@ if [[ -n "$BASE_URL" && -n "$API_KEY" ]]; then
         ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-claude-sonnet-5}"
     fi
     echo ""
+elif [[ "$AUTH_MODE" == "sso" ]]; then
+    echo ""
+    echo "SSO: select your model inside Claude Code with /model"
 fi
 
 # SSH directory
