@@ -153,7 +153,7 @@ cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
     "mattpocock": {
       "source": {
         "source": "git",
-        "url": "https://github.com/mattpocock/skills"
+        "url": "https://github.com/mattpocock/skills.git"
       }
     }
   }
@@ -163,9 +163,11 @@ echo "  settings.json written."
 
 echo ""
 echo "Installing aihero plugin (mattpocock-skills) into .home/..."
+INSTALL_ARGS=(-v "$HOME_DIR:/home/$CONTAINER_USER" -e "HOME=/home/$CONTAINER_USER")
+[[ -n "$API_KEY" ]] && INSTALL_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$API_KEY")
+[[ -n "$BASE_URL" ]] && INSTALL_ARGS+=(-e "ANTHROPIC_BASE_URL=$BASE_URL")
 docker compose -f "$PROFILE_DIR/docker-compose.yml" run --rm \
-    -v "$HOME_DIR:/home/$CONTAINER_USER" \
-    -e "HOME=/home/$CONTAINER_USER" \
+    "${INSTALL_ARGS[@]}" \
     claude plugins install mattpocock-skills
 echo "Plugin install complete — skills persisted in .home/.claude/"
 
