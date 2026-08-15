@@ -340,25 +340,25 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - FuelIX (`api.fuelix.ai`) promoted to default [1] in BASE_URL menu across all 3 `setup.sh` files; api.anthropic.com moved to option 2
 - Model list heading changed from `"Available Claude models:"` to `"Available models on $BASE_URL:"` — makes clear which gateway the list comes from
 - SSO path now prints `"SSO: select your model inside Claude Code with /model"` instead of silently skipping model selection
-- aihero plugin install completely replaced — `claude plugins install mattpocock-skills` fails headlessly (marketplace auth not available in container); new approach: host git-clones `mattpocock/skills` at setup time, copies skill dirs from `skills/` (excluding `deprecated/`) into `.home/.claude/skills/`; no container involvement in install
+- aihero plugin install completely replaced — `claude plugins install mattpocock-skills` fails headlessly (marketplace auth not available in container); new approach: host git-clones `mattpocock/skills` at setup time, copies skill dirs from `skills/` (excluding `deprecated/`) into `.home/.claude/skills/`; no container involvement in install; 35 skills confirmed installed on test
+- Shell injection via `alias_name` fixed — strip non-`[a-zA-Z0-9_-]` chars before writing to rc file
+- `local -A` (bash 4+) replaced with `_profile_desc()` case function — fixes macOS bash 3.2 incompatibility
+- Profile picker now validates numeric input before array indexing — clean error message instead of raw arithmetic failure
+- `mktemp` dir in aihero setup now cleaned via `trap EXIT` — was leaking on `git clone` failure
 
 #### Code review findings (from in-container review, 2026-08-15)
 
-Security — prioritized by severity:
+**Fixed (commit `e9ede0b`):**
+- ~~Shell injection via `alias_name`~~ — sanitize to `[a-zA-Z0-9_-]` before writing rc file
+- ~~`local -A` breaks macOS~~ — replaced with `_profile_desc()` case function (bash 3.2 compatible)
+- ~~Profile picker no input validation~~ — numeric guard before array indexing
+- ~~`mktemp` leaks on `git clone` failure~~ — `trap 'rm -rf "$SKILLS_TMP"' EXIT` added
 
-1. **Docker socket + skip-permissions = host escape** (`claude.sh:279`, all Dockerfiles): `--dangerously-skip-permissions` in the ENTRYPOINT removes the in-process permission gate; the docker socket mount gives any agent root-equivalent daemon access. These combine to a full host escape vector. handoff.md documents this as accepted, but it's the widest hole in the sandbox. Worth explicitly re-evaluating or at minimum hardening the ENTRYPOINT to require a flag instead of baking it in.
-2. **Shell injection via `alias_name`** (`claude.sh:118-144`): `alias_name` is read from user input and spliced unquoted into `alias ${alias_name}='…'` appended to `~/.bash_aliases`/`~/.zshrc`. A value with `'` breaks out of quoting and injects into a host rc file — persistent host-side code execution. Fix: sanitize or quote the alias name before writing.
-3. **Unpinned `git clone` for aihero skills** (`profiles/aihero/setup.sh:162`): no commit/tag pin; a compromised upstream injects skill content (which Claude treats as instructions) on next setup. Fix: pin to a specific commit SHA.
-4. **No WORKDIR validation** (`claude.sh:256`): `CLAUDE_WORKDIR` / `--workdir` accepted without path checks; pointing it at `/` or `$HOME` makes any sub-container trivially able to walk the host filesystem. Fix: require the path to exist and be a directory; optionally warn on obviously broad paths.
-5. **SSH keys exfiltrable despite `:ro`** (`claude.sh:287`): `:ro` prevents writes, not reads; a compromised agent can still read and exfiltrate key material. Accepted risk unless the docker socket is removed.
-
-Code quality — actionable soon:
-
-- **`local -A` breaks macOS** (`claude.sh:50`): associative arrays require bash 4+; stock macOS ships bash 3.2 → `init()` dies silently on unmodified Macs. Fix: use a plain function or a parallel indexed array instead of `local -A descriptions`.
-- **Three near-identical `setup.sh` files**: OS detection, GID lookup, auth/model prompts, `.env` write, settings.json seed are copy-pasted across vanilla/aihero/omc. Any bugfix must be applied in three places. Refactor target: `profiles/_common.sh` sourced by each profile.
-- **`"permissions": {"allow": []}` is dead config**: `--dangerously-skip-permissions` in ENTRYPOINT bypasses the permission system before settings.json is read. Remove it to reduce noise.
-- **Profile picker has no input validation** (`claude.sh:75-78`): non-numeric input hits `$((choice - 1))` → raw bash arithmetic error. Fix: validate before array indexing.
-- **`mktemp` dir leaks on `git clone` failure** (`profiles/aihero/setup.sh:161`): `set -e` exits before the `rm -rf` cleanup runs. Fix: `trap 'rm -rf "$SKILLS_TMP"' EXIT` immediately after `mktemp`.
+**Pending for next session:**
+- **Pin aihero git clone** (`profiles/aihero/setup.sh`) — add a specific commit SHA to `git clone --depth=1`; unpinned means upstream skill changes (which Claude treats as instructions) arrive silently on next setup
+- **`profiles/_common.sh` refactor** — OS detection, GID lookup, auth/model prompts, `.env` write, and settings.json seed are copy-pasted across all three setup.sh files (~150 lines); any future bugfix applies three times without this
+- **Remove dead `"permissions": {"allow": []}` config** from all seeded settings.json — `--dangerously-skip-permissions` in ENTRYPOINT bypasses the permission system before settings.json is read
+- **Docker socket + skip-permissions design review** — both together are a full host escape vector; decide: keep as accepted risk (document more explicitly) or harden ENTRYPOINT to require `--dangerously-skip-permissions` as an explicit runtime flag
 
 ---
 
