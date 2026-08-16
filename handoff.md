@@ -22,6 +22,12 @@ TELUS org-managed settings (`remote-settings.json`) inject three things into eve
 - Telemetry still makes network calls out of the container (accepted by user)
 - Org managed settings still apply inside container; approval dialog appears once per fresh `.home/` (expected)
 
+**`.home/` containment is structurally enforced:** `claude.sh` runs the container with `--read-only`
+plus a `tmpfs` mount at `/tmp`. Writes outside `.home/`, the workdir, or `/tmp` fail loudly (read-only
+filesystem error) instead of silently landing somewhere unmounted and un-inspected. Before this
+(#17), containment was verified only by observation — reading each known org hook's source and
+confirming it wrote under `$HOME` — which doesn't cover hooks or tools not yet reviewed.
+
 ---
 
 ## Repository Structure

@@ -348,6 +348,13 @@ DOCKER_ARGS+=(--cap-drop ALL)
 DOCKER_ARGS+=(--memory 2g)
 DOCKER_ARGS+=(--cpus 1.5)
 DOCKER_ARGS+=(--pids-limit 256)
+# Structural containment: rootfs is read-only, so anything writing outside
+# .home/, the workdir, or /tmp fails loudly instead of landing somewhere
+# unmounted and un-inspected. /tmp gets its own writable tmpfs since tools
+# (git, npm, claude itself) commonly need real scratch space there.
+DOCKER_ARGS+=(--read-only)
+# shellcheck disable=SC2054  # comma is part of docker's --tmpfs option syntax, not an array separator
+DOCKER_ARGS+=(--tmpfs /tmp:rw,size=512m)
 [[ -n "${SSH_DIR:-}" ]] && DOCKER_ARGS+=(-v "$SSH_DIR:$CONTAINER_HOME/.ssh:ro")
 [[ -n "${DOCKER_GID:-}" ]] && DOCKER_ARGS+=(--group-add "$DOCKER_GID")
 
