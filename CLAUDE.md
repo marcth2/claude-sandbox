@@ -86,5 +86,10 @@ conventions and the design rules behind them.
 ## Roadmap
 
 Phase 1 (core setup) and Phase 3 (docs) done. Phase 2 superseded — decisions captured inline above
-as they were made. Phase 4 (MCP servers: Confluence, GitHub, Slack, Jira, AWS, Laravel Boost) is
-deferred and mostly at the scoping stage — see git history / `handoff.md` if picking it up.
+as they were made. Phase 4 (MCP servers) dropped from the roadmap (2026-08-16): the Slack MCP POC
+(`slack-mcp-server` npm package, #30) worked, but getting there required standing up a whole Slack
+app (bot scopes, reinstall-on-scope-change, org admin approval to invite the bot into channels) —
+too much per-integration credential wrangling to justify as this repo's template for
+Confluence/Jira/AWS/Laravel Boost. Revisit MCP access later via Claude Code's plugin model instead
+(e.g. `/plugin install slack`, hosted OAuth) rather than hand-wiring npm stdio servers — see git
+history / `handoff.md` for the shelved scoping notes if picked up again.
