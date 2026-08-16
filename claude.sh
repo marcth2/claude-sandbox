@@ -31,8 +31,8 @@ Options:
                       already-selected profile (requires confirmation). Does
                       NOT let you change profiles — clone the repo again for
                       that.
-  --help              Show this help and exit
-  --version           Show claude-sandbox version and exit
+  --help, -h          Show this help and exit
+  --version, -v       Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
 
 Auth modes:
