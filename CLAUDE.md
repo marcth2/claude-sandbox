@@ -1,0 +1,82 @@
+# claude-sandbox — Developer Guide
+
+Companion to [README.md](README.md) (user-facing). This file is developer/LLM-facing: repo
+conventions and the design rules behind them.
+
+## Threat model
+
+- Org-managed Claude Code settings (managed/enterprise environments) can execute code and touch
+  the filesystem as part of normal tooling.
+- Running inside Docker contains that: shell execution and rc-file-style writes stay inside
+  `.home/`, never the host's real home directory.
+- `--read-only` rootfs + tmpfs `/tmp` (in `claude.sh`) enforces this structurally — writes outside
+  `.home/`, the workdir, or `/tmp` fail loudly instead of landing somewhere unmonitored. Exists
+  because auditing every current/future hook by reading its source doesn't scale.
+- Not solved: telemetry still leaves the container over the network; org-managed settings still
+  apply inside the container (one-time approval dialog per fresh `.home/`).
+- Accepted risk: the Docker socket is mounted in for `docker`/`gh`/MCP use inside the container —
+  threat model is contained execution, not container escape.
+
+### Credential placement
+
+- `apikey` mode — secret lives in `.env` (host-side, gitignored), injected via
+  `-e ANTHROPIC_AUTH_TOKEN=...` at `docker run` time.
+- `sso` mode — secret lives in `.home/.claude.json` (OAuth token from Claude Code's own login),
+  never in `.env`.
+- Don't cross them (convention, not code-enforced): `.env` is host-readable by anyone with
+  checkout access; `.home/` is scoped to whatever already trusts the container.
+
+## Repository structure
+
+- `claude.sh` — single entry point: init/dispatch, flag parsing, `docker run`.
+- `.env.example` — schema doc, committed. `.env` itself is gitignored.
+- `.githooks/pre-commit` — shellcheck + shfmt on staged `*.sh`.
+- `profiles/_common.sh` — shared `setup.sh` helpers (OS detect, prompts, `.env` write, build, seed).
+- `profiles/<name>/{Dockerfile,docker-compose.yml,setup.sh}` — one dir per profile. Profile-specific
+  notes live in that profile's own `CLAUDE.md`, not here.
+- Two images: `claude-code:omc` (needs the `oh-my-claude-sisyphus` npm package) and
+  `claude-code:base` (shared by `vanilla`/`aihero` — aihero's skill pack is files copied at setup
+  time, not a system dependency).
+- New profile convention: system deps → `Dockerfile`; config/skills/settings → `setup.sh`. No
+  system dep beyond the base image → point `docker-compose.yml` at `claude-code:base` instead of
+  building a new image.
+
+## Key design decisions
+
+- Profile is locked per checkout (`.claude-profile`, gitignored, written once by `init()`). No
+  `--profile` override — would mix state from two plugin ecosystems into one `.home/`. New
+  profile → new checkout.
+- `.home/` is the entire container `$HOME`, not just `.claude/`. Container user/uid/gid are
+  captured from the host at setup (`CONTAINER_USER/UID/GID` in `.env`) so mount ownership is
+  always correct.
+- Docker GID is detected at runtime (`getent group docker`), not hardcoded — varies per host.
+- `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`. `claude.sh --confirm`
+  overrides the entrypoint to plain `claude` at `docker run` time for real permission prompts.
+- Auth is injected via `-e` flags at `docker run`, never via `settings.json`.
+
+## Platform support
+
+- Linux + native Docker Engine: the only path actually tested, across all three profiles.
+- macOS / WSL2: real code paths exist (OS detection, GID handling, shell-rc selection), untested —
+  Docker Desktop's virtualization differs enough that "code exists" ≠ "works."
+- Native Windows shells (PowerShell/Git Bash/Cygwin): rejected outright by a guard in `claude.sh`.
+  Use WSL2.
+- First to hit macOS/WSL2 breakage: file an issue with what broke.
+
+## Development workflow
+
+- Shell scripts: shellcheck + shfmt (`-i 4 -ci`). Enable once per checkout:
+  `git config core.hooksPath .githooks`. Hook lints staged `*.sh`, blocks on real findings,
+  warns-and-skips if the tools aren't installed.
+- No commits directly to `master`. Branch → commit → push → PR (what changed + how tested) →
+  squash-merge after review.
+- No automated test suite. Verify by running the affected profile(s):
+  `./claude.sh --reset && ./claude.sh`, or a scoped `docker run` reproducing the relevant slice of
+  `claude.sh`'s args. Changes to `profiles/_common.sh` or `claude.sh`'s docker args → smoke test
+  all three profiles (shared code path).
+
+## Roadmap
+
+Phase 1 (core setup) and Phase 3 (docs) done. Phase 2 superseded — decisions captured inline above
+as they were made. Phase 4 (MCP servers: Confluence, GitHub, Slack, Jira, AWS, Laravel Boost) is
+deferred and mostly at the scoping stage — see git history / `handoff.md` if picking it up.
