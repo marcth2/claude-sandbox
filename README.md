@@ -11,10 +11,26 @@ Claude Code inside a container keeps that activity, and anything it touches on d
 container's `.home/` mount instead of your real home directory. See
 [CLAUDE.md](CLAUDE.md#threat-model) for the full threat model.
 
+## System requirements
+
+- **Docker Engine** with the Compose v2 plugin (`docker compose`, not the standalone
+  `docker-compose`). Developed against Docker 29.x / Compose v5.x — check with `docker -v` and
+  `docker compose version`.
+- **bash 4+** (uses `${var,,}` case conversion and `read -e`/`read -i` readline features).
+- **git**, for cloning and for the git-identity prompt during setup.
+
+## Platform support
+
+Linux with native Docker Engine is the only platform that's actually been exercised end-to-end.
+macOS and WSL2 have real, implemented code paths (not stubs), but nobody has run them yet — see
+[CLAUDE.md](CLAUDE.md#platform-support) for specifics. Native Windows shells (PowerShell, Git Bash,
+Cygwin) are rejected outright; run from a WSL2 terminal instead. If you hit problems on macOS or
+Windows, please file an issue.
+
 ## Quick start
 
 ```bash
-git clone <this-repo> claude-sandbox
+git clone git@github.com:marcth2/claude-sandbox.git
 cd claude-sandbox
 ./claude.sh
 ```
@@ -109,14 +125,6 @@ inside the container — e.g. `claude-sandbox -- --help` shows Claude Code's own
 
 Deletes `.claude-profile`, `.env`, and `.home/` after a typed confirmation. Run `./claude.sh` again
 afterward to redo setup, including picking a profile from scratch.
-
-## Platform support
-
-Linux with native Docker Engine is the only platform that's actually been exercised end-to-end.
-macOS and WSL2 have real, implemented code paths (not stubs), but nobody has run them yet — see
-[CLAUDE.md](CLAUDE.md#platform-support) for specifics. Native Windows shells (PowerShell, Git Bash,
-Cygwin) are rejected outright; run from a WSL2 terminal instead. If you hit problems on macOS or
-Windows, please file an issue.
 
 ## Contributing
 
