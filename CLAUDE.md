@@ -1,4 +1,4 @@
-# claude-sandbox — Developer Guide
+Finishe# claude-sandbox — Developer Guide
 
 Companion to [README.md](README.md) (user-facing). This file is developer/LLM-facing: repo
 conventions and the design rules behind them. See [docs/architecture.md](docs/architecture.md) for
@@ -98,3 +98,4 @@ minor release, no active work yet:
 
 - MCP integrations (Confluence, Slack, Jira, AWS, etc.)
 - Prototype improvements to the install script's UX and output formatting
+- Support for adding new plugins/profiles beyond the current three
