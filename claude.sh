@@ -48,7 +48,7 @@ EOF
 
 _profile_desc() {
     case "$1" in
-        vanilla) echo "Claude Code, no plugins — plain baseline" ;;
+        vanilla) echo "Claude Code, no plugins - plain baseline" ;;
         omc) echo "Claude Code + oh-my-claude-sisyphus multi-agent orchestration" ;;
         aihero) echo "Claude Code + AI Hero skill pack" ;;
         *) echo "" ;;
@@ -56,21 +56,22 @@ _profile_desc() {
 }
 
 init() {
-    echo "=== Claude Docker — First Run Setup ==="
-    echo ""
+    # shellcheck source=profiles/_common.sh
+    source "$REPO_DIR/profiles/_common.sh"
+    ui_init
 
     # Fixed display order; vanilla is the plain baseline and the default
     local ordered=(vanilla omc aihero)
 
     local profiles=()
-    echo "Available profiles:"
+    local menu_lines=()
     local i=1
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
         profiles+=("$name")
         local desc
         desc="$(_profile_desc "$name")"
-        echo "  $i) $name${desc:+ — $desc}"
+        menu_lines+=("$i) $name${desc:+ - $desc}")
         ((i++))
     done
     # Any unrecognized profiles not in the ordered list
@@ -79,30 +80,32 @@ init() {
         name="$(basename "$d")"
         [[ " ${ordered[*]} " == *" $name "* ]] && continue
         profiles+=("$name")
-        echo "  $i) $name"
+        menu_lines+=("$i) $name")
         ((i++))
     done
 
-    echo ""
-    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
-    echo "switch later. To use a different profile, clone the repo again into another directory."
-    echo ""
-    read -rp "Select profile [1]: " choice
-    choice="${choice:-1}"
+    ui_screen "Step 1/5 - Profile" \
+        "Claude Docker - First Run Setup" \
+        "" \
+        "${menu_lines[@]}" \
+        "" \
+        "Locked for this checkout - no --profile override. Clone again to switch."
+
+    ui_ask "Select profile" "1"
+    local choice="$UI_VALUE"
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
-        echo "Invalid selection — defaulting to 1."
+        ui_warn "Invalid selection — defaulting to 1."
         choice=1
     fi
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
     echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected — locked for this checkout."
-    echo ""
+    ui_ok "Profile '$selected' selected — locked for this checkout."
 
     bash "$REPO_DIR/profiles/$selected/setup.sh"
 
     # Alias setup — one place for all profiles
-    echo ""
+    ui_screen "Shell Alias" "Add a shell alias so you can just type its name to launch."
 
     # Pick shell config file based on OS and default shell
     # WSL/macOS paths are untested — logic based on standard conventions
@@ -119,8 +122,8 @@ init() {
             aliases_file="$HOME/.bash_aliases" # Linux and WSL
             ;;
         *)
-            echo "Unknown OS — add alias manually:"
-            echo "  alias <name>='${REPO_DIR}/claude.sh'"
+            ui_warn "Unknown OS — add alias manually:"
+            ui_info "alias <name>='${REPO_DIR}/claude.sh'"
             return 0
             ;;
     esac
@@ -133,20 +136,22 @@ init() {
     if [[ -n "$existing_line" ]]; then
         existing_name="${existing_line#alias }"
         existing_name="${existing_name%%=*}"
-        echo "Found existing alias for this install:"
-        echo "  $existing_line"
-        read -rp "Alias name [${existing_name}]: " alias_name
-        alias_name="${alias_name:-$existing_name}"
+        ui_box_top
+        ui_box_line "Found existing alias for this install:"
+        ui_box_line "  $existing_line"
+        ui_box_bottom
+        ui_ask "Alias name" "$existing_name"
+        alias_name="$UI_VALUE"
         alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
         [[ -z "$alias_name" ]] && alias_name="$existing_name"
         if [[ "$alias_name" != "$existing_name" ]]; then
             sed -i "/^alias ${existing_name}=/d" "$aliases_file"
             echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >>"$aliases_file"
-            echo "Renamed to '${alias_name}'."
+            ui_ok "Renamed to '${alias_name}'."
         fi
     else
-        read -rp "Alias name [claude-sandbox]: " alias_name
-        alias_name="${alias_name:-claude-sandbox}"
+        ui_ask "Alias name" "claude-sandbox"
+        alias_name="$UI_VALUE"
         alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
         [[ -z "$alias_name" ]] && alias_name="claude-sandbox"
         if [[ -n "$alias_name" ]]; then
@@ -154,16 +159,17 @@ init() {
             if grep -qE "^alias ${alias_name}=" "$aliases_file" 2>/dev/null; then
                 local conflict
                 conflict=$(grep -E "^alias ${alias_name}=" "$aliases_file")
-                echo "Name '${alias_name}' already used:"
-                echo "  $conflict"
-                read -rp "Overwrite it? [y/N]: " overwrite
-                if [[ "${overwrite,,}" == "y" ]]; then
+                ui_box_top
+                ui_box_line "Name '${alias_name}' already used:"
+                ui_box_line "  $conflict"
+                ui_box_bottom
+                if ui_confirm "Overwrite it?" "n"; then
                     sed -i "s|^alias ${alias_name}=.*|${alias_line}|" "$aliases_file"
-                    echo "Updated."
+                    ui_ok "Updated."
                 fi
             else
                 echo "$alias_line" >>"$aliases_file"
-                echo "Added."
+                ui_ok "Added."
             fi
         fi
     fi
@@ -171,44 +177,45 @@ init() {
     # Closing summary — source .env to read what setup wrote
     [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
     local launch_cmd="${alias_name:-$REPO_DIR/claude.sh}"
-    echo ""
-    echo "=========================================="
-    echo "Setup complete!"
-    echo ""
-    echo "Configuration:"
-    printf "  %-20s %s\n" "Profile:" "$selected"
-    printf "  %-20s %s\n" "Default Auth:" "${DEFAULT_AUTH:-apikey}"
+
+    ui_box_top
+    ui_box_line "Setup Complete" "${UI_BOLD}${UI_GREEN}Setup Complete${UI_RESET}"
+    ui_box_div
+    ui_box_line "$(printf '%-18s %s' "Profile:" "$selected")"
+    ui_box_line "$(printf '%-18s %s' "Default Auth:" "${DEFAULT_AUTH:-apikey}")"
     if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
         local key_mask
-        key_mask=$(printf '%*s' "${#ANTHROPIC_API_KEY}" '' | tr ' ' '*')
-        printf "  %-20s %s\n" "API Key:" "$key_mask"
+        key_mask=$(ui_mask "$ANTHROPIC_API_KEY")
+        ui_box_line "$(printf '%-18s %s' "API Key:" "$key_mask")"
     fi
-    [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && printf "  %-20s %s\n" "Gateway:" "$ANTHROPIC_BASE_URL"
+    [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && ui_box_line "$(printf '%-18s %s' "Gateway:" "$ANTHROPIC_BASE_URL")"
     if [[ -n "${ANTHROPIC_MODEL:-}" ]]; then
-        printf "  %-20s %s\n" "Default Model:" "$ANTHROPIC_MODEL"
+        ui_box_line "$(printf '%-18s %s' "Default Model:" "$ANTHROPIC_MODEL")"
     else
-        printf "  %-20s %s\n" "Default Model:" "(gateway default)"
+        ui_box_line "$(printf '%-18s %s' "Default Model:" "(gateway default)")"
     fi
     if [[ -n "${CLAUDE_WORKDIR:-}" ]]; then
-        printf "  %-20s %s\n" "Default Workspace:" "$CLAUDE_WORKDIR"
+        ui_box_line "$(printf '%-18s %s' "Default Workspace:" "$CLAUDE_WORKDIR")"
     else
-        printf "  %-20s %s\n" "Default Workspace:" "\$PWD at runtime"
+        ui_box_line "$(printf '%-18s %s' "Default Workspace:" "\$PWD at runtime")"
     fi
-    [[ -n "${SSH_DIR:-}" ]] && printf "  %-20s %s\n" "SSH keys:" "$SSH_DIR"
+    [[ -n "${SSH_DIR:-}" ]] && ui_box_line "$(printf '%-18s %s' "SSH keys:" "$SSH_DIR")"
     local gitconfig="$REPO_DIR/.home/.gitconfig"
     if [[ -f "$gitconfig" ]]; then
         local git_name git_email
         git_name=$(git config --file "$gitconfig" user.name 2>/dev/null || echo "")
         git_email=$(git config --file "$gitconfig" user.email 2>/dev/null || echo "")
-        [[ -n "$git_name" || -n "$git_email" ]] && printf "  %-20s %s\n" "Git identity:" "$git_name <$git_email>"
+        [[ -n "$git_name" || -n "$git_email" ]] && ui_box_line "$(printf '%-18s %s' "Git identity:" "$git_name <$git_email>")"
     else
-        printf "  %-20s %s\n" "Git identity:" "(not set — commits inside container will fail until configured)"
+        ui_box_line "$(printf '%-18s %s' "Git identity:" "(not set)")"
     fi
+    ui_box_bottom
+
     if [[ "${DEFAULT_AUTH:-apikey}" == "sso" ]]; then
         echo ""
-        echo "First-run notes:"
-        echo "  - Look for a URL in the terminal — open it in your host browser"
-        echo "  - Approve the org managed settings dialog (once per fresh .home/)"
+        ui_info "First-run notes:"
+        ui_info "  - Look for a URL in the terminal — open it in your host browser"
+        ui_info "  - Approve the org managed settings dialog (once per fresh .home/)"
     fi
     echo ""
     [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
@@ -216,7 +223,7 @@ init() {
     echo ""
     echo "Once inside Claude Code, run /gh-login once to authenticate gh"
     echo "(needed for git push / PR / issue operations from the container)."
-    echo "=========================================="
+    echo ""
 }
 
 do_recover() {
