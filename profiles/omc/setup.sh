@@ -20,6 +20,10 @@ common_write_env
 common_build_image
 common_seed_home
 
+# oh-my-claudecode's own `omc setup` (run below) writes settings.json's
+# hooks/statusLine and merges around whatever keys already exist here —
+# it does not need enabledPlugins/extraKnownMarketplaces (that machinery is
+# for the marketplace-install path; this profile installs the npm CLI instead).
 cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {
   "env": {
@@ -29,22 +33,7 @@ cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
   "skipWorkflowUsageWarning": true,
   "alwaysThinkingEnabled": true,
   "spinnerTipsEnabled": true,
-  "theme": "dark",
-  "enabledPlugins": {
-    "oh-my-claudecode@omc": true
-  },
-  "extraKnownMarketplaces": {
-    "omc": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/Yeachan-Heo/oh-my-claudecode.git"
-      }
-    }
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs"
-  }
+  "theme": "dark"
 }
 SETTINGS
 echo "  settings.json written."
@@ -57,25 +46,10 @@ else
     echo "  Warning: $HOST_CLAUDE_MD not found — skipping CLAUDE.md seed."
 fi
 
-echo "  Seeding .omc-config.json..."
-OMC_VERSION=$(docker run --rm --entrypoint node claude-code:omc \
-    -e "console.log(require('/usr/local/lib/node_modules/oh-my-claudecode/package.json').version)" \
-    2>/dev/null || echo "unknown")
-SETUP_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-cat > "$HOME_DIR/.claude/.omc-config.json" <<EOF
-{
-  "defaultExecutionMode": "ultrawork",
-  "configuredAt": "$SETUP_TIMESTAMP",
-  "team": {
-    "ops": {
-      "maxAgents": 3,
-      "defaultAgentType": "claude",
-      "monitorIntervalMs": 30000,
-      "shutdownTimeoutMs": 15000
-    }
-  },
-  "setupCompleted": "$SETUP_TIMESTAMP",
-  "setupVersion": "$OMC_VERSION"
-}
-EOF
-echo "  .omc-config.json written (omc $OMC_VERSION)."
+echo "  Running omc setup (installs hooks/agents/skills, merges settings.json/CLAUDE.md)..."
+docker run --rm --entrypoint omc \
+    -v "$HOME_DIR:/home/${CONTAINER_USER}" \
+    -e "HOME=/home/${CONTAINER_USER}" \
+    -u "${CONTAINER_UID}:${CONTAINER_GID}" \
+    claude-code:omc setup --quiet
+echo "  omc setup complete."
