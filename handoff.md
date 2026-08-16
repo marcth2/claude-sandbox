@@ -314,7 +314,7 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 
 #### Carry forward from previous session
 - [x] Update `.gitignore` to exclude `.env`, `.claude-profile`, `.home*/`
-- [ ] Delete `/work/projects/Claude-Docker/` (old repo — low priority, not blocking)
+- [x] Delete `/work/projects/Claude-Docker/` (old repo — done manually, 2026-08-16)
 
 #### New work — COMPLETE
 - [x] Create `profiles/omc/`, `profiles/aihero/`, `profiles/vanilla/` with Dockerfile, docker-compose.yml, setup.sh each
