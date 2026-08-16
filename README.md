@@ -40,7 +40,8 @@ cd claude-sandbox
 First run walks you through:
 1. **Pick a profile** — `vanilla` (plain Claude Code), `omc` (+ oh-my-claude-sisyphus multi-agent
    orchestration), or `aihero` (+ the [AI Hero](https://github.com/mattpocock/skills) skill pack).
-   This choice is locked in for the checkout — to try a different profile, clone the repo again.
+   This choice is permanent for the checkout, not just a default — there's no way to switch it
+   later. To try a different profile, clone the repo again into a separate directory.
 2. **Auth mode** — `apikey` (via a gateway) or `sso` (OAuth via claude.ai).
 3. **SSH key directory** — optional, for `git push` from inside the container.
 4. **Default workspace** — optional; falls back to `$PWD` at runtime if unset.
@@ -86,6 +87,37 @@ Auth mode and profile are orthogonal — any combination is valid. Default mode 
 them apart is what keeps `.env`'s host visibility from being a credential leak — see
 [CLAUDE.md](CLAUDE.md#credential-placement).
 
+## CLI flags
+
+```
+claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
+
+  --auth=sso|apikey   Override default auth mode from .env
+  --model=<id>        Override ANTHROPIC_MODEL for this invocation
+  --workdir=<path>    Override working directory for this invocation
+  --confirm           Use Claude Code's real permission prompts instead of
+                      --dangerously-skip-permissions
+  --recover           Wipe and rebuild .env/.home/ for this checkout — see
+                      "Recovering" below
+  --help, -h          Show this help and exit
+  --version, -v       Show claude-sandbox version and exit
+  --                  Pass all following args directly to the claude binary
+```
+
+Anything after `--` (or any unrecognized flag) is passed straight through to the `claude` binary
+inside the container — e.g. `claude-sandbox -- --help` shows Claude Code's own help.
+
+## Recovering
+
+```bash
+./claude.sh --recover
+```
+
+For when setup broke partway (interrupted image build, corrupted `.home/`, etc.) — wipes `.env` and
+`.home/` after a typed confirmation, then re-runs setup for the profile this checkout is already
+locked to. It does **not** let you pick a different profile; to use a different profile, clone the
+repo again into a separate directory.
+
 ## `.env` schema
 
 `.env` is written interactively by `setup.sh` on first run. `.env.example` documents the schema
@@ -108,41 +140,9 @@ CONTAINER_UID=
 CONTAINER_GID=
 ```
 
-## CLI flags
-
-```
-claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
-
-  --auth=sso|apikey   Override default auth mode from .env
-  --model=<id>        Override ANTHROPIC_MODEL for this invocation
-  --workdir=<path>    Override working directory for this invocation
-  --confirm           Use Claude Code's real permission prompts instead of
-                      --dangerously-skip-permissions
-  --recover           Wipe and rebuild .env and .home/ for this checkout's
-                      already-selected profile (requires confirmation). Does
-                      NOT let you change profiles — clone the repo again for
-                      that.
-  --help, -h          Show this help and exit
-  --version, -v       Show claude-sandbox version and exit
-  --                  Pass all following args directly to the claude binary
-```
-
-Anything after `--` (or any unrecognized flag) is passed straight through to the `claude` binary
-inside the container — e.g. `claude-sandbox -- --help` shows Claude Code's own help.
-
-## Recovering
-
-```bash
-./claude.sh --recover
-```
-
-For when setup broke partway (interrupted image build, corrupted `.home/`, etc.) — wipes `.env` and
-`.home/` after a typed confirmation, then re-runs setup for the profile this checkout is already
-locked to. It does **not** let you pick a different profile; to use a different profile, clone the
-repo again into a separate directory.
-
 ## Contributing
 
 See [CLAUDE.md](CLAUDE.md) for repo structure, design decisions, and the development workflow
-(shell linting hook, branch/PR conventions). Profile-specific implementation notes (`omc`, `aihero`)
-live in each profile's own `CLAUDE.md` under `profiles/<name>/`.
+(shell linting hook, branch/PR conventions), including the [Roadmap](CLAUDE.md#roadmap) of
+candidate future work (e.g. MCP integrations). Profile-specific implementation notes (`omc`,
+`aihero`) live in each profile's own `CLAUDE.md` under `profiles/<name>/`.
