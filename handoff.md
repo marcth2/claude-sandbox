@@ -512,7 +512,12 @@ Author two files:
 
 ---
 
-## Phase 4 — MCP Servers (deferred)
+## Phase 4 — MCP Servers (dropped, 2026-08-16)
+
+> Dropped from the roadmap — see CLAUDE.md Roadmap. The Slack MCP POC (`slack-mcp-server`, #30) was
+> reverted after the Slack app/scopes/bot-invite/admin-approval dance proved too much per-integration
+> overhead to template. Future MCP access will go through Claude Code's plugin model instead. Scoping
+> notes below kept for reference only, not an active plan.
 
 Design is partially resolved. Implement after Phase 1 is stable.
 
