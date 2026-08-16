@@ -9,7 +9,7 @@ HOME_DIR="$REPO_DIR/.home"
 echo "=== Claude Docker — omc Profile Setup ==="
 echo ""
 
-# shellcheck source=../_common.sh
+# shellcheck source=profiles/_common.sh
 source "$REPO_DIR/profiles/_common.sh"
 
 common_detect_os
@@ -24,7 +24,7 @@ common_seed_home
 # hooks/statusLine and merges around whatever keys already exist here —
 # it does not need enabledPlugins/extraKnownMarketplaces (that machinery is
 # for the marketplace-install path; this profile installs the npm CLI instead).
-cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
+cat >"$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"

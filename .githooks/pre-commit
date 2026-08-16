@@ -1,0 +1,34 @@
+#!/bin/bash
+# Lints staged shell scripts with shellcheck + shfmt.
+# Enable once per checkout: git config core.hooksPath .githooks
+set -euo pipefail
+
+REPO_DIR="$(git rev-parse --show-toplevel)"
+cd "$REPO_DIR"
+
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM -- '*.sh')
+[[ ${#staged[@]} -eq 0 ]] && exit 0
+
+missing=()
+command -v shellcheck >/dev/null 2>&1 || missing+=(shellcheck)
+command -v shfmt >/dev/null 2>&1 || missing+=(shfmt)
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "pre-commit: ${missing[*]} not found on PATH — skipping shell lint."
+    echo "  Install: https://github.com/koalaman/shellcheck#installing and https://github.com/mvdan/sh#shfmt"
+    exit 0
+fi
+
+status=0
+
+echo "pre-commit: shellcheck ${staged[*]}"
+if ! shellcheck -x "${staged[@]}"; then
+    status=1
+fi
+
+echo "pre-commit: shfmt -d ${staged[*]}"
+if ! shfmt -i 4 -ci -d "${staged[@]}"; then
+    echo "  Formatting differs — run: shfmt -i 4 -ci -w ${staged[*]}"
+    status=1
+fi
+
+exit "$status"

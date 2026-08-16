@@ -9,7 +9,7 @@ HOME_DIR="$REPO_DIR/.home"
 echo "=== Claude Docker — vanilla Profile Setup ==="
 echo ""
 
-# shellcheck source=../_common.sh
+# shellcheck source=profiles/_common.sh
 source "$REPO_DIR/profiles/_common.sh"
 
 common_detect_os
@@ -20,7 +20,7 @@ common_write_env
 common_build_image
 common_seed_home
 
-cat > "$HOME_DIR/.claude/settings.json" <<'SETTINGS'
+cat >"$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
