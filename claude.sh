@@ -55,22 +55,39 @@ _profile_desc() {
     esac
 }
 
+_init_colors() {
+    if [[ -t 1 ]]; then
+        C_BOLD=$(tput bold 2>/dev/null || echo "")
+        C_DIM=$(tput dim 2>/dev/null || echo "")
+        C_CYAN=$(tput setaf 6 2>/dev/null || echo "")
+        C_GREEN=$(tput setaf 2 2>/dev/null || echo "")
+        C_RESET=$(tput sgr0 2>/dev/null || echo "")
+    else
+        C_BOLD=""
+        C_DIM=""
+        C_CYAN=""
+        C_GREEN=""
+        C_RESET=""
+    fi
+}
+
 init() {
-    echo "=== Claude Docker — First Run Setup ==="
+    _init_colors
+    echo "${C_BOLD}Claude Docker — First Run Setup${C_RESET}"
     echo ""
 
     # Fixed display order; vanilla is the plain baseline and the default
     local ordered=(vanilla omc aihero)
 
     local profiles=()
-    echo "Available profiles:"
+    echo "${C_BOLD}Available profiles:${C_RESET}"
     local i=1
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
         profiles+=("$name")
         local desc
         desc="$(_profile_desc "$name")"
-        echo "  $i) $name${desc:+ — $desc}"
+        echo "  ${C_CYAN}$i)${C_RESET} ${C_BOLD}$name${C_RESET}${desc:+ — $desc}"
         ((i++))
     done
     # Any unrecognized profiles not in the ordered list
@@ -79,13 +96,13 @@ init() {
         name="$(basename "$d")"
         [[ " ${ordered[*]} " == *" $name "* ]] && continue
         profiles+=("$name")
-        echo "  $i) $name"
+        echo "  ${C_CYAN}$i)${C_RESET} ${C_BOLD}$name${C_RESET}"
         ((i++))
     done
 
     echo ""
-    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
-    echo "switch later. To use a different profile, clone the repo again into another directory."
+    echo "${C_DIM}This choice is locked for this checkout — there's no --profile override or way to"
+    echo "switch later. To use a different profile, clone the repo again into another directory.${C_RESET}"
     echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
@@ -96,7 +113,7 @@ init() {
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
     echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected — locked for this checkout."
+    echo "${C_GREEN}Profile '$selected' selected${C_RESET} — locked for this checkout."
     echo ""
 
     bash "$REPO_DIR/profiles/$selected/setup.sh"
@@ -172,10 +189,9 @@ init() {
     [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
     local launch_cmd="${alias_name:-$REPO_DIR/claude.sh}"
     echo ""
-    echo "=========================================="
-    echo "Setup complete!"
+    echo "${C_BOLD}Setup complete!${C_RESET}"
     echo ""
-    echo "Configuration:"
+    echo "${C_BOLD}Configuration:${C_RESET}"
     printf "  %-20s %s\n" "Profile:" "$selected"
     printf "  %-20s %s\n" "Default Auth:" "${DEFAULT_AUTH:-apikey}"
     if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
@@ -206,17 +222,16 @@ init() {
     fi
     if [[ "${DEFAULT_AUTH:-apikey}" == "sso" ]]; then
         echo ""
-        echo "First-run notes:"
+        echo "${C_BOLD}First-run notes:${C_RESET}"
         echo "  - Look for a URL in the terminal — open it in your host browser"
         echo "  - Approve the org managed settings dialog (once per fresh .home/)"
     fi
     echo ""
     [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
-    echo "Run: $launch_cmd"
+    echo "${C_GREEN}Run: $launch_cmd${C_RESET}"
     echo ""
-    echo "Once inside Claude Code, run /gh-login once to authenticate gh"
-    echo "(needed for git push / PR / issue operations from the container)."
-    echo "=========================================="
+    echo "${C_DIM}Once inside Claude Code, run /gh-login once to authenticate gh"
+    echo "(needed for git push / PR / issue operations from the container).${C_RESET}"
 }
 
 do_recover() {
