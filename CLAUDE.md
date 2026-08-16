@@ -92,6 +92,7 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
 
 ## Roadmap
 
-Phase 1 (core setup) and Phase 3 (docs) done. Phase 2 superseded — decisions captured inline above
-as they were made. MCP integrations (Confluence, Slack, Jira, AWS, etc.) are a candidate for a
-future minor release — no active work.
+Phase 1 (core setup), Phase 3 (docs), and a full documentation-drift audit are done, culminating in
+the `1.0.0` release — see [CHANGELOG.md](CHANGELOG.md). Phase 2 superseded — decisions captured
+inline above as they were made. MCP integrations (Confluence, Slack, Jira, AWS, etc.) are a
+candidate for a future minor release — no active work.
