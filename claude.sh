@@ -55,23 +55,47 @@ _profile_desc() {
     esac
 }
 
+_init_read_key() {
+    local k rest
+    IFS= read -rsn1 k || true
+    if [[ -z "$k" ]]; then
+        printf 'ENTER'
+        return 0
+    fi
+    if [[ "$k" == $'\x1b' ]]; then
+        IFS= read -rsn2 -t 0.05 rest 2>/dev/null || true
+        case "$rest" in
+            '[A') printf 'UP' ;;
+            '[B') printf 'DOWN' ;;
+            *) printf 'ESC' ;;
+        esac
+        return 0
+    fi
+    printf '%s' "$k"
+}
+
 init() {
-    echo "=== Claude Docker — First Run Setup ==="
-    echo ""
+    # Direction C ("Dashboard Table"): profile choice is the one prompt the
+    # owner said they actually engage with, so it stays a real, distinct,
+    # can't-accidentally-skip-past choice — arrow-key + Enter, same idiom as
+    # the auth/mounts/git dashboard in profiles/_common.sh, just on its own
+    # screen since profile selection happens in this process, before the
+    # per-profile setup.sh (and its dashboard) even starts.
+    local bold dim reset cyan green
+    bold=$(tput bold 2>/dev/null || true)
+    dim=$(tput dim 2>/dev/null || true)
+    reset=$(tput sgr0 2>/dev/null || true)
+    cyan=$(tput setaf 6 2>/dev/null || true)
+    green=$(tput setaf 2 2>/dev/null || true)
 
     # Fixed display order; vanilla is the plain baseline and the default
     local ordered=(vanilla omc aihero)
 
-    local profiles=()
-    echo "Available profiles:"
-    local i=1
+    local profiles=() descs=()
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
         profiles+=("$name")
-        local desc
-        desc="$(_profile_desc "$name")"
-        echo "  $i) $name${desc:+ — $desc}"
-        ((i++))
+        descs+=("$(_profile_desc "$name")")
     done
     # Any unrecognized profiles not in the ordered list
     for d in "$REPO_DIR/profiles"/*/; do
@@ -79,24 +103,52 @@ init() {
         name="$(basename "$d")"
         [[ " ${ordered[*]} " == *" $name "* ]] && continue
         profiles+=("$name")
-        echo "  $i) $name"
-        ((i++))
+        descs+=("")
     done
 
-    echo ""
-    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
-    echo "switch later. To use a different profile, clone the repo again into another directory."
-    echo ""
-    read -rp "Select profile [1]: " choice
-    choice="${choice:-1}"
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
-        echo "Invalid selection — defaulting to 1."
-        choice=1
-    fi
-    local idx=$((choice - 1))
-    local selected="${profiles[$idx]}"
+    local sel=0
+
+    _init_draw_profiles() {
+        clear
+        printf '%s%s=== claude-sandbox — First Run Setup ===%s\n\n' "$bold" "$cyan" "$reset"
+        printf 'Choose a profile — Up/Down to move, Enter to confirm.\n'
+        printf '%sLocked for this checkout: no --profile override, no switching later.%s\n' "$dim" "$reset"
+        printf '%sTo use a different profile, clone the repo again into another directory.%s\n\n' "$dim" "$reset"
+        local idx
+        for idx in "${!profiles[@]}"; do
+            local marker="  " lcol="$reset" d="${descs[$idx]}"
+            if ((idx == sel)); then
+                marker="${bold}${cyan}> ${reset}"
+                lcol="${bold}"
+            fi
+            printf '%s%s%s%s%s\n' "$marker" "$lcol" "${profiles[$idx]}" "$reset" "${d:+ — $d}"
+        done
+    }
+
+    tput civis 2>/dev/null || true
+    _init_draw_profiles
+    local key
+    while true; do
+        key=$(_init_read_key)
+        case "$key" in
+            UP)
+                sel=$(((sel - 1 + ${#profiles[@]}) % ${#profiles[@]}))
+                _init_draw_profiles
+                ;;
+            DOWN)
+                sel=$(((sel + 1) % ${#profiles[@]}))
+                _init_draw_profiles
+                ;;
+            ENTER) break ;;
+            *) : ;;
+        esac
+    done
+    tput cnorm 2>/dev/null || true
+
+    local selected="${profiles[$sel]}"
     echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected — locked for this checkout."
+    echo ""
+    echo "${green}Profile '$selected' selected${reset} — locked for this checkout."
     echo ""
 
     bash "$REPO_DIR/profiles/$selected/setup.sh"
