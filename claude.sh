@@ -25,6 +25,8 @@ Options:
   --auth=sso|apikey   Override default auth mode from .env
   --model=<id>        Override ANTHROPIC_MODEL for this invocation
   --workdir=<path>    Override working directory for this invocation
+  --confirm           Use Claude Code's real permission prompts instead of
+                      --dangerously-skip-permissions
   --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
   --help              Show this help and exit
   --version           Show claude-sandbox version and exit
@@ -268,6 +270,7 @@ CONTAINER_HOME="/home/${CONTAINER_USER:-$(id -un)}"
 AUTH="${DEFAULT_AUTH:-apikey}"
 WORKDIR_OVERRIDE=""
 MODEL_OVERRIDE=""
+CONFIRM=false
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -295,6 +298,10 @@ while [[ $# -gt 0 ]]; do
         --workdir)
             WORKDIR_OVERRIDE="$2"
             shift 2
+            ;;
+        --confirm)
+            CONFIRM=true
+            shift
             ;;
         --reset) do_reset ;;
         --help | -h)
@@ -338,6 +345,10 @@ case "$PROFILE" in
 esac
 
 DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
+# --dangerously-skip-permissions is baked into the image's ENTRYPOINT. --confirm
+# overrides the entrypoint to plain `claude`, dropping that flag so Claude Code's
+# real allow/deny prompts are used instead.
+[[ "$CONFIRM" == "true" ]] && DOCKER_ARGS+=(--entrypoint claude)
 DOCKER_ARGS+=(-v "$WORKDIR:$WORKDIR")
 DOCKER_ARGS+=(-v "$REPO_DIR/.home:$CONTAINER_HOME")
 DOCKER_ARGS+=(-v /var/run/docker.sock:/var/run/docker.sock)

@@ -89,6 +89,14 @@ Once selected, the profile is fixed for that checkout. No `--profile` override f
 
 Auth mode and profile are **orthogonal** — any combination is valid. No automatic fallback between modes. Default auth read from `DEFAULT_AUTH` in `.env`.
 
+**Credential placement rule:** `apikey` mode's secret lives host-side, in `.env` (gitignored, read by
+`claude.sh` and injected via `-e ANTHROPIC_AUTH_TOKEN=...` — see [Auth injection](#auth-injection-claudesh)).
+`sso` mode's credential lives container-side only, in `.home/.claude.json` (written by Claude's own
+OAuth flow, never touches `.env` or a host shell env var). Don't cross the two: an API key doesn't
+belong in `.home/`, and an OAuth token doesn't belong in `.env`. This isn't enforced by code — it's a
+convention that keeps the "container is the sandbox" threat model coherent: `.env` is a plain file
+whoever reads the checkout can see, while `.home/` is scoped to whatever already trusts the container.
+
 ### Home directory isolation — `.home/`
 
 Mount `.home/` (per-checkout, gitignored) as `/home/<username>/` (entire home, not just `.claude`). The container username matches the host user (`CONTAINER_USER` in `.env`), so file ownership on mounted volumes is correct on any machine.
