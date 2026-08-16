@@ -16,7 +16,9 @@ container's `.home/` mount instead of your real home directory. See
 - **Docker Engine** with the Compose v2 plugin (`docker compose`, not the standalone
   `docker-compose`). Developed against Docker 29.x / Compose v5.x — check with `docker -v` and
   `docker compose version`.
-- **bash 4+** (uses `${var,,}` case conversion and `read -e`/`read -i` readline features).
+- **bash 4+** (uses `${var,,}` case conversion and `read -e`/`read -i` readline features). macOS
+  ships bash 3.2 by default — install a newer bash (e.g. `brew install bash`) and run `claude.sh`
+  with it explicitly if you're on macOS.
 - **git**, for cloning and for the git-identity prompt during setup.
 
 ## Platform support
