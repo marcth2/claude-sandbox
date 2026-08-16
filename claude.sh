@@ -27,7 +27,10 @@ Options:
   --workdir=<path>    Override working directory for this invocation
   --confirm           Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
-  --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
+  --recover           Wipe and rebuild .env and .home/ for this checkout's
+                      already-selected profile (requires confirmation). Does
+                      NOT let you change profiles — clone the repo again for
+                      that.
   --help              Show this help and exit
   --version           Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
@@ -210,34 +213,47 @@ init() {
     echo "=========================================="
 }
 
-do_reset() {
-    local profile=""
-    [[ -f "$PROFILE_FILE" ]] && profile=$(cat "$PROFILE_FILE")
+do_recover() {
+    if [[ ! -f "$PROFILE_FILE" ]]; then
+        echo "Error: no profile selected yet — nothing to recover."
+        echo "Run '${REPO_DIR}/claude.sh' to set up a profile first."
+        exit 1
+    fi
 
-    echo "=== Claude Docker — Reset ==="
+    local profile
+    profile=$(cat "$PROFILE_FILE")
+
+    if [[ ! -f "$REPO_DIR/profiles/$profile/setup.sh" ]]; then
+        echo "Error: profile '$profile' no longer exists in this checkout"
+        echo "(profiles/$profile/setup.sh not found)."
+        echo "Recovery can't re-run setup for a profile that's gone. Clone the"
+        echo "repo again to pick a currently available profile."
+        exit 1
+    fi
+
+    echo "=== Claude Docker — Recover ==="
     echo ""
-    echo "This will permanently delete:"
-    echo "  $PROFILE_FILE"
+    echo "This will permanently delete and re-create:"
     echo "  $REPO_DIR/.env"
     echo "  $REPO_DIR/.home/"
     echo ""
-    if [[ -n "$profile" ]]; then
-        read -rp "Type the profile name '$profile' to confirm: " confirm
-        if [[ "$confirm" != "$profile" ]]; then
-            echo "Cancelled — profile name did not match."
-            exit 1
-        fi
-    else
-        read -rp "Type 'reset' to confirm: " confirm
-        if [[ "$confirm" != "reset" ]]; then
-            echo "Cancelled."
-            exit 1
-        fi
+    echo "Profile stays locked to '$profile' — this does NOT let you switch"
+    echo "profiles. To use a different profile, clone the repo again."
+    echo ""
+    read -rp "Type the profile name '$profile' to confirm: " confirm
+    if [[ "$confirm" != "$profile" ]]; then
+        echo "Cancelled — profile name did not match."
+        exit 1
     fi
 
-    rm -f "$PROFILE_FILE" "$REPO_DIR/.env"
+    rm -f "$REPO_DIR/.env"
     rm -rf "$REPO_DIR/.home"
-    echo "Reset complete. Run '${REPO_DIR}/claude.sh' again to set up a fresh profile."
+    echo ""
+    echo "Wiped .env and .home/. Re-running setup for profile '$profile'..."
+    echo ""
+    bash "$REPO_DIR/profiles/$profile/setup.sh"
+    echo ""
+    echo "Recovery complete. Run '${REPO_DIR}/claude.sh' to launch."
     exit 0
 }
 
@@ -251,7 +267,7 @@ case "${1:-}" in
         echo "claude-sandbox $VERSION"
         exit 0
         ;;
-    --reset) do_reset ;;
+    --recover) do_recover ;;
 esac
 
 if [[ ! -f "$PROFILE_FILE" ]]; then
@@ -303,7 +319,7 @@ while [[ $# -gt 0 ]]; do
             CONFIRM=true
             shift
             ;;
-        --reset) do_reset ;;
+        --recover) do_recover ;;
         --help | -h)
             usage
             exit 0
@@ -389,7 +405,7 @@ if ! docker image inspect "$IMAGE" &>/dev/null; then
     echo "Error: Docker image '$IMAGE' not found."
     echo "Setup may have been interrupted before the build completed."
     echo ""
-    echo "Run: ./claude.sh --reset  (then re-run ./claude.sh to redo setup)"
+    echo "Run: ./claude.sh --recover  (rebuilds .env/.home/ for the '$PROFILE' profile)"
     exit 1
 fi
 

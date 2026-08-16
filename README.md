@@ -110,7 +110,10 @@ claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
   --workdir=<path>    Override working directory for this invocation
   --confirm           Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
-  --reset             Wipe .claude-profile, .env, and .home/ (requires confirmation)
+  --recover           Wipe and rebuild .env and .home/ for this checkout's
+                      already-selected profile (requires confirmation). Does
+                      NOT let you change profiles — clone the repo again for
+                      that.
   --help              Show this help and exit
   --version           Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
@@ -119,14 +122,16 @@ claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
 Anything after `--` (or any unrecognized flag) is passed straight through to the `claude` binary
 inside the container — e.g. `claude-sandbox -- --help` shows Claude Code's own help.
 
-## Resetting
+## Recovering
 
 ```bash
-./claude.sh --reset
+./claude.sh --recover
 ```
 
-Deletes `.claude-profile`, `.env`, and `.home/` after a typed confirmation. Run `./claude.sh` again
-afterward to redo setup, including picking a profile from scratch.
+For when setup broke partway (interrupted image build, corrupted `.home/`, etc.) — wipes `.env` and
+`.home/` after a typed confirmation, then re-runs setup for the profile this checkout is already
+locked to. It does **not** let you pick a different profile; to use a different profile, clone the
+repo again into a separate directory.
 
 ## Contributing
 
