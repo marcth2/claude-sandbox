@@ -27,7 +27,7 @@ Linux with native Docker Engine is the only platform that's actually been exerci
 macOS and WSL2 have real, implemented code paths (not stubs), but nobody has run them yet — see
 [CLAUDE.md](CLAUDE.md#platform-support) for specifics. Native Windows shells (PowerShell, Git Bash,
 Cygwin) are rejected outright; run from a WSL2 terminal instead. If you hit problems on macOS or
-Windows, please file an issue.
+Windows, please [file an issue](https://github.com/marcth2/claude-sandbox/issues).
 
 ## Quick start
 
