@@ -512,53 +512,9 @@ Author two files:
 
 ---
 
-## Phase 4 — MCP Servers (dropped, 2026-08-16)
+## Phase 4 — MCP Servers (candidate for a future minor release)
 
-> Dropped from the roadmap — see CLAUDE.md Roadmap. The Slack MCP POC (`slack-mcp-server`, #30) was
-> reverted after the Slack app/scopes/bot-invite/admin-approval dance proved too much per-integration
-> overhead to template. Future MCP access will go through Claude Code's plugin model instead. Scoping
-> notes below kept for reference only, not an active plan.
-
-Design is partially resolved. Implement after Phase 1 is stable.
-
-### Confluence (already Docker-based)
-- Current host config (`mcp.json.TH1.OLD`): `docker exec -i confluence-mcp-server python confluence-server.py`
-- Approach: identical inside the container — Docker socket is mounted, so `docker exec` to a running host container works
-- Requires `confluence-mcp-server` container to be running on the host before launching claude-sandbox
-- No Dockerfile changes needed
-
-### GitHub
-- `gh` CLI is installed in all 3 Dockerfiles (done 2026-08-15)
-- Auth wiring: add `GITHUB_TOKEN` to `.env` (classic PAT, SSO-authorized for TELUS org); setup.sh runs
-  `gh auth login --with-token <<< "$GITHUB_TOKEN"` so CLI is configured automatically; token also
-  injected via `-e GITHUB_TOKEN` for the MCP server — one token wires both
-- SSO note: TELUS Health uses SAML SSO on `github.com` — after creating the PAT, go to
-  GitHub org settings → Authorize the token for the org
-- MCP server (`@modelcontextprotocol/server-github`): optional structured Claude tool access
-  (read/create PRs, issues); uses `GITHUB_TOKEN` env var
-- `gh auth` state persists in `.home/.config/gh/` — survives container restarts
-
-### Slack
-- Server: `@modelcontextprotocol/server-slack` (npm, stdio)
-- Install: `npm install -g @modelcontextprotocol/server-slack` in Dockerfile
-- Auth: `SLACK_BOT_TOKEN` in `.env`, injected via `-e`
-
-### Jira / Confluence (Atlassian)
-- Separate from the Docker-exec Confluence MCP above
-- TBD: evaluate available npm/Python MCP servers for Jira
-- May require Atlassian API token in `.env`
-
-### AWS
-- Credentials: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` in `.env`
-  or mount `~/.aws/` into container
-- OpenVPN: required for RDS access — evaluate whether VPN runs on host (container inherits
-  host network routes if `--network host`) or inside container (complex, not recommended)
-- RDS MySQL: connection strings per environment in `.env` or a secrets manager
-- MCP server: `awslabs/mcp` collection — TBD which servers are needed
-- Recommended: run VPN on host, container inherits routes via bridge networking
-
-### Laravel Boost
-- TBD: determine package name, install method (npm/pip/custom), auth requirements
+See CLAUDE.md Roadmap. No active work or scoping.
 
 ---
 
