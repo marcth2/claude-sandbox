@@ -84,6 +84,9 @@ init() {
     done
 
     echo ""
+    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
+    echo "switch later. To use a different profile, clone the repo again into another directory."
+    echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
@@ -93,7 +96,7 @@ init() {
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
     echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected."
+    echo "Profile '$selected' selected — locked for this checkout."
     echo ""
 
     bash "$REPO_DIR/profiles/$selected/setup.sh"
