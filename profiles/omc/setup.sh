@@ -16,10 +16,12 @@ common_detect_os
 common_prompt_auth
 common_prompt_mounts
 common_prompt_git
+common_prompt_mcp
 common_write_env
 common_build_image
 common_seed_home
 common_seed_gh_skill
+common_register_mcp
 
 # oh-my-claudecode's own `omc setup` (run below) writes settings.json's
 # hooks/statusLine and merges around whatever keys already exist here —
