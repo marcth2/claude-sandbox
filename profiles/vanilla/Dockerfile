@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y docker-ce-cli gh \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @anthropic-ai/claude-code slack-mcp-server
+RUN npm install -g @anthropic-ai/claude-code
 
 ARG DOCKER_GID=984
 ARG USERNAME=claude

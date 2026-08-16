@@ -105,11 +105,6 @@ common_prompt_mounts() {
     read -rep "Default workspace directory (press Enter to leave unset — uses \$PWD at runtime): " WORKDIR_INPUT
 }
 
-common_prompt_mcp() {
-    read -rsp "Slack bot token (xoxb-...) for the Slack MCP server (press Enter to skip): " SLACK_MCP_XOXB_TOKEN
-    echo ""
-}
-
 common_prompt_git() {
     local host_name host_email
     host_name=$(git config --global user.name 2>/dev/null || echo "")
@@ -142,9 +137,6 @@ ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
 # Mounts
 SSH_DIR=${SSH_DIR}
 CLAUDE_WORKDIR=${WORKDIR_INPUT}
-
-# MCP servers (optional — blank = skip registration)
-SLACK_MCP_XOXB_TOKEN=${SLACK_MCP_XOXB_TOKEN}
 
 # Container user (captured at setup — matches host uid/gid for correct file ownership)
 CONTAINER_USER=${CONTAINER_USER}
@@ -210,24 +202,4 @@ home directory — it persists across container restarts, the same way OAuth sta
 mode persists in `.home/.claude.json`.
 SKILL
     echo "  gh-login skill seeded."
-}
-
-common_register_mcp() {
-    if [[ -z "${SLACK_MCP_XOXB_TOKEN:-}" ]]; then
-        echo ""
-        echo "No Slack bot token provided — skipping Slack MCP registration."
-        return
-    fi
-
-    local image
-    image=$(grep -m1 '^\s*image:' "$PROFILE_DIR/docker-compose.yml" | sed 's/^\s*image:\s*//')
-
-    echo ""
-    echo "Registering Slack MCP server (user scope)..."
-    docker run --rm --entrypoint claude \
-        -v "$HOME_DIR:/home/${CONTAINER_USER}" \
-        -e "HOME=/home/${CONTAINER_USER}" \
-        -u "${CONTAINER_UID}:${CONTAINER_GID}" \
-        "$image" mcp add slack-mcp --scope user --env "SLACK_MCP_XOXB_TOKEN=${SLACK_MCP_XOXB_TOKEN}" -- slack-mcp-server
-    echo "  Slack MCP server registered (user scope, in .home/.claude.json)."
 }

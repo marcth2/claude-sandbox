@@ -53,17 +53,6 @@ conventions and the design rules behind them.
 - `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`. `claude.sh --confirm`
   overrides the entrypoint to plain `claude` at `docker run` time for real permission prompts.
 - Auth is injected via `-e` flags at `docker run`, never via `settings.json`.
-- MCP servers are registered at user scope (`.home/.claude.json`, via `claude mcp add --scope user`
-  in a one-off `docker run` from `common_register_mcp`), not project-scope `.mcp.json` — same
-  reasoning as `.home/` being the whole `$HOME`: available across every project in the container,
-  not one workdir. Slack (`common_prompt_mcp`/`common_register_mcp` in `_common.sh`, skippable via
-  blank `SLACK_MCP_XOXB_TOKEN`) is the POC; it's the shape (npm stdio server + one token) future MCP
-  integrations should copy — Confluence/Jira/AWS don't fit this shape as cleanly, see Roadmap.
-- Slack MCP uses the `slack-mcp-server` npm package (korotovsky), not the official-looking
-  `@modelcontextprotocol/server-slack` — that reference package is archived upstream
-  (`modelcontextprotocol/servers-archived`) with an explicit "don't build new work on it" notice.
-  Confirmed by `npm install` emitting a deprecation warning during a Dockerfile build; caught before
-  merge, not after.
 - `--recover` wipes `.env`/`.home/` and re-runs `setup.sh` for the already-locked profile — it never
   touches `.claude-profile`. Earlier it doubled as a profile-switcher (deleted `.claude-profile`
   too), which quietly defeated the profile-lock decision above; scoping it to the current profile
@@ -97,8 +86,5 @@ conventions and the design rules behind them.
 ## Roadmap
 
 Phase 1 (core setup) and Phase 3 (docs) done. Phase 2 superseded — decisions captured inline above
-as they were made. Phase 4 (MCP/tool integrations) started: `gh` OAuth device-flow auth + `/gh-login`
-skill, and Slack MCP as the reusable-pattern POC, both done. GitHub MCP explicitly skipped — the
-`@modelcontextprotocol/server-github` package needs its own `GITHUB_PERSONAL_ACCESS_TOKEN`, not
-reusing `gh`'s OAuth session, doubling the credential surface for no real gain. Confluence, Jira,
-AWS, Laravel Boost remain deferred and mostly at the scoping stage — see git history / `handoff.md`.
+as they were made. Phase 4 (MCP servers: Confluence, GitHub, Slack, Jira, AWS, Laravel Boost) is
+deferred and mostly at the scoping stage — see git history / `handoff.md` if picking it up.
