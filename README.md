@@ -43,8 +43,8 @@ First run walks you through:
    This choice is locked in for the checkout — to try a different profile, clone the repo again.
 2. **Auth mode** — `apikey` (via a gateway, unlimited) or `sso` (OAuth via claude.ai).
 3. **SSH key directory** — optional, for `git push` from inside the container.
-4. **Git identity** — defaults to your host's `git config --global user.name`/`user.email`.
-5. **Default workspace** — optional; falls back to `$PWD` at runtime if unset.
+4. **Default workspace** — optional; falls back to `$PWD` at runtime if unset.
+5. **Git identity** — defaults to your host's `git config --global user.name`/`user.email`.
 
 Setup then builds the Docker image and writes `.env`. It also offers to add a shell alias
 (default name: `claude-sandbox`) so you can just type that instead of the full path.

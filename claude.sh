@@ -49,7 +49,7 @@ EOF
 _profile_desc() {
     case "$1" in
         vanilla) echo "Claude Code, no plugins — plain baseline" ;;
-        omc) echo "Claude Code + oh-my-claudecode multi-agent orchestration" ;;
+        omc) echo "Claude Code + oh-my-claude-sisyphus multi-agent orchestration" ;;
         aihero) echo "Claude Code + AI Hero skill pack" ;;
         *) echo "" ;;
     esac
