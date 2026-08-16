@@ -1,7 +1,8 @@
 # claude-sandbox — Developer Guide
 
 Companion to [README.md](README.md) (user-facing). This file is developer/LLM-facing: repo
-conventions and the design rules behind them.
+conventions and the design rules behind them. See [docs/architecture.md](docs/architecture.md) for
+diagrams of the profile/image build matrix and the `.home/` mount + auth-injection flow.
 
 ## Threat model
 
