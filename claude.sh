@@ -210,6 +210,9 @@ init() {
     echo ""
     [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
     echo "Run: $launch_cmd"
+    echo ""
+    echo "Once inside Claude Code, run /gh-login once to authenticate gh"
+    echo "(needed for git push / PR / issue operations from the container)."
     echo "=========================================="
 }
 
