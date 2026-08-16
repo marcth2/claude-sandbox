@@ -131,4 +131,5 @@ afterward to redo setup, including picking a profile from scratch.
 ## Contributing
 
 See [CLAUDE.md](CLAUDE.md) for repo structure, design decisions, and the development workflow
-(shell linting hook, branch/PR conventions).
+(shell linting hook, branch/PR conventions). Profile-specific implementation notes (`omc`, `aihero`)
+live in each profile's own `CLAUDE.md` under `profiles/<name>/`.
