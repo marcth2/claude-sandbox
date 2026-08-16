@@ -41,7 +41,7 @@ First run walks you through:
 1. **Pick a profile** — `vanilla` (plain Claude Code), `omc` (+ oh-my-claude-sisyphus multi-agent
    orchestration), or `aihero` (+ the [AI Hero](https://github.com/mattpocock/skills) skill pack).
    This choice is locked in for the checkout — to try a different profile, clone the repo again.
-2. **Auth mode** — `apikey` (via a gateway, unlimited) or `sso` (OAuth via claude.ai).
+2. **Auth mode** — `apikey` (via a gateway) or `sso` (OAuth via claude.ai).
 3. **SSH key directory** — optional, for `git push` from inside the container.
 4. **Default workspace** — optional; falls back to `$PWD` at runtime if unset.
 5. **Git identity** — defaults to your host's `git config --global user.name`/`user.email`.
