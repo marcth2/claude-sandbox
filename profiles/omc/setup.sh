@@ -21,7 +21,7 @@ common_build_image
 common_seed_home
 common_seed_gh_skill
 
-# oh-my-claudecode's own `omc setup` (run below) writes settings.json's
+# oh-my-claude-sisyphus's own `omc setup` (run below) writes settings.json's
 # hooks/statusLine and merges around whatever keys already exist here —
 # it does not need enabledPlugins/extraKnownMarketplaces (that machinery is
 # for the marketplace-install path; this profile installs the npm CLI instead).

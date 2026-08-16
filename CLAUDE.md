@@ -1,7 +1,8 @@
 # claude-sandbox — Developer Guide
 
 Companion to [README.md](README.md) (user-facing). This file is developer/LLM-facing: repo
-conventions and the design rules behind them.
+conventions and the design rules behind them. See [docs/architecture.md](docs/architecture.md) for
+diagrams of the profile/image build matrix and the `.home/` mount + auth-injection flow.
 
 ## Threat model
 
@@ -53,6 +54,12 @@ conventions and the design rules behind them.
 - `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`. `claude.sh --confirm`
   overrides the entrypoint to plain `claude` at `docker run` time for real permission prompts.
 - Auth is injected via `-e` flags at `docker run`, never via `settings.json`.
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is injected as a real env var (not just in seeded
+  `settings.json`) whenever `--auth=apikey` is used — gateway-routed auth needs it set at the
+  process level for multi-agent features to work, not just declared in config.
+- Every container run is resource-capped (`--memory 2g --cpus 1.5 --pids-limit 256`) in addition
+  to the `--cap-drop ALL`/`--read-only` containment above — bounds a runaway process inside the
+  sandbox rather than just constraining what it can touch.
 - `--recover` wipes `.env`/`.home/` and re-runs `setup.sh` for the already-locked profile — it never
   touches `.claude-profile`. Earlier it doubled as a profile-switcher (deleted `.claude-profile`
   too), which quietly defeated the profile-lock decision above; scoping it to the current profile
@@ -85,6 +92,10 @@ conventions and the design rules behind them.
 
 ## Roadmap
 
-Phase 1 (core setup) and Phase 3 (docs) done. Phase 2 superseded — decisions captured inline above
-as they were made. MCP integrations (Confluence, Slack, Jira, AWS, etc.) are a candidate for a
-future minor release — no active work.
+Core setup/CLI, user- and developer-facing docs, and a full documentation-drift audit are done,
+culminating in the `1.0.0` release — see [CHANGELOG.md](CHANGELOG.md). Candidates for a future
+minor release, no active work yet:
+
+- MCP integrations (Confluence, Slack, Jira, AWS, etc.)
+- Prototype improvements to the install script's UX and output formatting
+- Support for adding new plugins/profiles beyond the current three

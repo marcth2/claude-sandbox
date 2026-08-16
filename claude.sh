@@ -31,8 +31,8 @@ Options:
                       already-selected profile (requires confirmation). Does
                       NOT let you change profiles — clone the repo again for
                       that.
-  --help              Show this help and exit
-  --version           Show claude-sandbox version and exit
+  --help, -h          Show this help and exit
+  --version, -v       Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
 
 Auth modes:
@@ -49,7 +49,7 @@ EOF
 _profile_desc() {
     case "$1" in
         vanilla) echo "Claude Code, no plugins — plain baseline" ;;
-        omc) echo "Claude Code + oh-my-claudecode multi-agent orchestration" ;;
+        omc) echo "Claude Code + oh-my-claude-sisyphus multi-agent orchestration" ;;
         aihero) echo "Claude Code + AI Hero skill pack" ;;
         *) echo "" ;;
     esac
@@ -84,6 +84,9 @@ init() {
     done
 
     echo ""
+    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
+    echo "switch later. To use a different profile, clone the repo again into another directory."
+    echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
@@ -93,7 +96,7 @@ init() {
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
     echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected."
+    echo "Profile '$selected' selected — locked for this checkout."
     echo ""
 
     bash "$REPO_DIR/profiles/$selected/setup.sh"
@@ -210,6 +213,9 @@ init() {
     echo ""
     [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
     echo "Run: $launch_cmd"
+    echo ""
+    echo "Once inside Claude Code, run /gh-login once to authenticate gh"
+    echo "(needed for git push / PR / issue operations from the container)."
     echo "=========================================="
 }
 

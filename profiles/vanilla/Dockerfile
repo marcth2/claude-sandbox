@@ -17,6 +17,7 @@ ARG DOCKER_GID=984
 ARG USERNAME=claude
 ARG USER_UID=1000
 ARG USER_GID=1000
+# node:22-slim ships a 'node' user at uid/gid 1000 — rename to match the host user
 RUN groupmod -g "${USER_GID}" -n "${USERNAME}" node && \
     usermod -l "${USERNAME}" -u "${USER_UID}" -m -d "/home/${USERNAME}" node && \
     groupadd -g "${DOCKER_GID}" docker && \
