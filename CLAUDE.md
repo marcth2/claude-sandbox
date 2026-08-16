@@ -53,6 +53,10 @@ conventions and the design rules behind them.
 - `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`. `claude.sh --confirm`
   overrides the entrypoint to plain `claude` at `docker run` time for real permission prompts.
 - Auth is injected via `-e` flags at `docker run`, never via `settings.json`.
+- `--recover` wipes `.env`/`.home/` and re-runs `setup.sh` for the already-locked profile — it never
+  touches `.claude-profile`. Earlier it doubled as a profile-switcher (deleted `.claude-profile`
+  too), which quietly defeated the profile-lock decision above; scoping it to the current profile
+  closes that gap instead of just tidying its symptoms.
 
 ## Platform support
 
@@ -71,9 +75,9 @@ conventions and the design rules behind them.
 - No commits directly to `master`. Branch → commit → push → PR (what changed + how tested) →
   squash-merge after review.
 - No automated test suite. Verify by running the affected profile(s):
-  `./claude.sh --reset && ./claude.sh`, or a scoped `docker run` reproducing the relevant slice of
-  `claude.sh`'s args. Changes to `profiles/_common.sh` or `claude.sh`'s docker args → smoke test
-  all three profiles (shared code path).
+  `./claude.sh --recover` re-runs setup for the locked profile in place, or a scoped `docker run`
+  reproducing the relevant slice of `claude.sh`'s args. Changes to `profiles/_common.sh` or
+  `claude.sh`'s docker args → smoke test all three profiles (shared code path).
 
 ## Roadmap
 
