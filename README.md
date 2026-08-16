@@ -72,6 +72,22 @@ the printed code/URL on your host browser, and `gh`/`git push`/`gh pr create` wo
 Credential state lands in `.home/.config/gh/`, bind-mounted like everything else in `.home/`, so it
 survives container restarts without re-authenticating each session.
 
+## MCP servers
+
+[`slack-mcp-server`](https://github.com/korotovsky/slack-mcp-server) (a community-maintained,
+actively-developed server — the official `@modelcontextprotocol/server-slack` reference package was
+archived upstream and shouldn't be used for new work) is pre-installed in every profile's image and,
+if you set `SLACK_MCP_XOXB_TOKEN` in `.env` (setup.sh will prompt for it, skippable), gets
+registered as a user-scope MCP server during setup — available across every project inside the
+container, not just one workdir. Leave the token blank to skip Slack MCP entirely. Using bot-token
+auth only gives access to channels the bot's been invited to (no workspace search) — see the
+server's own docs if you need the broader xoxc/xoxd/xoxp auth modes.
+
+This is the proof-of-concept for how MCP servers get wired into this repo going forward: system
+dependency in the `Dockerfile`, a skippable `.env`-driven prompt in `setup.sh`, registered via
+`claude mcp add --scope user` (landing in `.home/.claude.json`, alongside `sso` mode's OAuth state)
+rather than hand-written JSON. Future MCP integrations should follow the same shape.
+
 ## Auth modes
 
 | Flag | Method | Credential lives in |
@@ -101,6 +117,10 @@ ANTHROPIC_MODEL=                     # model ID; set by setup from the gateway's
 # Mounts
 SSH_DIR=                             # SSH key directory; blank = no SSH mount
 CLAUDE_WORKDIR=                      # workspace root; blank = use $PWD at runtime
+
+# MCP servers (optional — blank = skip registration)
+SLACK_MCP_XOXB_TOKEN=                # Slack bot token (xoxb-...); registers the Slack MCP server
+                                      # at user scope if set
 
 # Container user (set by setup.sh — do not edit manually)
 CONTAINER_USER=

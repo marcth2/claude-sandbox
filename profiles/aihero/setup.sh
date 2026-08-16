@@ -16,10 +16,12 @@ common_detect_os
 common_prompt_auth
 common_prompt_mounts
 common_prompt_git
+common_prompt_mcp
 common_write_env
 common_build_image
 common_seed_home
 common_seed_gh_skill
+common_register_mcp
 
 cat >"$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {
