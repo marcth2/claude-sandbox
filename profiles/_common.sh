@@ -172,3 +172,34 @@ EOF
         echo "  .gitconfig seeded ($GIT_USER_NAME <$GIT_USER_EMAIL>)."
     fi
 }
+
+common_seed_gh_skill() {
+    local skill_dir="$HOME_DIR/.claude/skills/gh-login"
+    mkdir -p "$skill_dir"
+    cat >"$skill_dir/SKILL.md" <<'SKILL'
+---
+description: Authenticate the gh CLI via OAuth device flow, for git push/PR/issue operations from inside the container.
+disable-model-invocation: true
+---
+
+Authenticate `gh` (the GitHub CLI) for this container via OAuth device flow.
+
+1. Run `gh auth status`. If it already reports an authenticated account, tell the user and stop.
+2. Otherwise, run (via the Bash tool, with a long timeout — this blocks until the user completes
+   auth in their browser or it times out):
+   ```
+   printf '\n' | gh auth login --hostname github.com --git-protocol https --web
+   ```
+   `BROWSER=echo` is set in this container, so `gh` won't try to launch a browser itself — it
+   prints a one-time code and a `https://github.com/login/device` URL instead of opening one.
+3. As soon as the code and URL appear in the command's output, relay them to the user verbatim and
+   tell them to open the URL on their own machine (not inside the container) and enter the code.
+4. Wait for the command to finish. On success, confirm with `gh auth status` and report the
+   authenticated account back to the user.
+
+Auth state is written to `.home/.config/gh/` on the host, which is bind-mounted as this container's
+home directory — it persists across container restarts, the same way OAuth state for `sso` auth
+mode persists in `.home/.claude.json`.
+SKILL
+    echo "  gh-login skill seeded."
+}

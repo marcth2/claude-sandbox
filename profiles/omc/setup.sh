@@ -19,6 +19,7 @@ common_prompt_git
 common_write_env
 common_build_image
 common_seed_home
+common_seed_gh_skill
 
 # oh-my-claudecode's own `omc setup` (run below) writes settings.json's
 # hooks/statusLine and merges around whatever keys already exist here —

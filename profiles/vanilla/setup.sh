@@ -19,6 +19,7 @@ common_prompt_git
 common_write_env
 common_build_image
 common_seed_home
+common_seed_gh_skill
 
 cat >"$HOME_DIR/.claude/settings.json" <<'SETTINGS'
 {

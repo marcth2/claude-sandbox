@@ -57,6 +57,10 @@ conventions and the design rules behind them.
   touches `.claude-profile`. Earlier it doubled as a profile-switcher (deleted `.claude-profile`
   too), which quietly defeated the profile-lock decision above; scoping it to the current profile
   closes that gap instead of just tidying its symptoms.
+- `common_seed_gh_skill` (in `_common.sh`, called by every profile's `setup.sh`) seeds a
+  `/gh-login` skill into `.home/.claude/skills/gh-login/`. Manual-invoke only
+  (`disable-model-invocation: true`) — an OAuth login shouldn't trigger itself. `gh` is already in
+  every Dockerfile; this just drives `gh auth login`'s device flow and surfaces the code/URL.
 
 ## Platform support
 
