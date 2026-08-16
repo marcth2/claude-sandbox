@@ -1,5 +1,10 @@
 # Claude-Docker Handoff
 
+> **This is the working development log**, kept as history of decisions and session-by-session
+> fixes. For current, user-facing docs see [README.md](README.md); for developer-facing docs
+> (design decisions, contribution guidance) see [CLAUDE.md](CLAUDE.md). Content here may be stale
+> where it overlaps with those — CLAUDE.md/README.md win on conflict.
+
 ## Goal
 
 Run Claude Code entirely inside Docker to isolate the host OS from org-managed hooks.
