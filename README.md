@@ -64,6 +64,14 @@ Each checkout is locked to one profile with its own `.home/` and `.env`. There's
 override flag — that would mix state from two different plugin ecosystems into one home directory.
 To use a different profile, clone the repo again into a separate directory.
 
+## GitHub auth
+
+Every profile ships a `/gh-login` skill (seeded into `.home/.claude/skills/` at setup time) that
+walks through `gh auth login`'s OAuth device flow — run it once inside a container session, follow
+the printed code/URL on your host browser, and `gh`/`git push`/`gh pr create` work from then on.
+Credential state lands in `.home/.config/gh/`, bind-mounted like everything else in `.home/`, so it
+survives container restarts without re-authenticating each session.
+
 ## Auth modes
 
 | Flag | Method | Credential lives in |
