@@ -538,6 +538,30 @@ Design is partially resolved. Implement after Phase 1 is stable.
 
 ---
 
+## Development — Shell Linting
+
+All shell scripts (`claude.sh`, `profiles/_common.sh`, `profiles/*/setup.sh`) are linted with
+[shellcheck](https://github.com/koalaman/shellcheck) and formatted with
+[shfmt](https://github.com/mvdan/sh) (`-i 4 -ci`). A native git hook enforces this on commit.
+
+**One-time setup per checkout:**
+```
+git config core.hooksPath .githooks
+```
+
+The hook (`.githooks/pre-commit`) lints only staged `*.sh` files, and blocks the commit
+(nonzero exit) if shellcheck reports findings or shfmt would reformat anything. If shellcheck
+or shfmt aren't installed on your machine, the hook prints an install pointer and skips
+linting rather than blocking — install them locally to get real enforcement.
+
+To fix a formatting failure: `shfmt -i 4 -ci -w <file>`.
+
+A plain native hook was chosen over the Python-based `pre-commit` framework since the project
+has no other Python dependency — this avoids introducing a second language toolchain just for
+linting a bash/Docker project.
+
+---
+
 ## Notes
 - `apt-get` fails at container runtime even as root via `docker exec` — `--cap-drop ALL` + `no-new-privileges` block the privilege transitions apt needs. All packages must be installed in the Dockerfile at build time. This is expected; use `docker build` to add packages, not live installs.
 - `--dangerously-skip-permissions` in ENTRYPOINT is intentional: container is the sandbox

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Unsupported: native Windows shells (Git Bash, MSYS2, Cygwin) — use WSL2 instead
 case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*)
+    MINGW* | MSYS* | CYGWIN*)
         echo "Error: unsupported shell environment '$(uname -s)'."
         echo "Run claude-sandbox from a WSL2 terminal, not PowerShell, Git Bash, or Cygwin."
         exit 1
@@ -44,9 +44,9 @@ EOF
 _profile_desc() {
     case "$1" in
         vanilla) echo "Claude Code, no plugins — plain baseline" ;;
-        omc)     echo "Claude Code + oh-my-claudecode multi-agent orchestration" ;;
-        aihero)  echo "Claude Code + AI Hero skill pack" ;;
-        *)       echo "" ;;
+        omc) echo "Claude Code + oh-my-claudecode multi-agent orchestration" ;;
+        aihero) echo "Claude Code + AI Hero skill pack" ;;
+        *) echo "" ;;
     esac
 }
 
@@ -63,14 +63,16 @@ init() {
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
         profiles+=("$name")
-        local desc; desc="$(_profile_desc "$name")"
+        local desc
+        desc="$(_profile_desc "$name")"
         echo "  $i) $name${desc:+ — $desc}"
         ((i++))
     done
     # Any unrecognized profiles not in the ordered list
     for d in "$REPO_DIR/profiles"/*/; do
-        local name; name="$(basename "$d")"
-        [[ " ${ordered[*]} " =~ " $name " ]] && continue
+        local name
+        name="$(basename "$d")"
+        [[ " ${ordered[*]} " == *" $name "* ]] && continue
         profiles+=("$name")
         echo "  $i) $name"
         ((i++))
@@ -79,13 +81,13 @@ init() {
     echo ""
     read -rp "Select profile [1]: " choice
     choice="${choice:-1}"
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#profiles[@]} )); then
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
         echo "Invalid selection — defaulting to 1."
         choice=1
     fi
     local idx=$((choice - 1))
     local selected="${profiles[$idx]}"
-    echo "$selected" > "$PROFILE_FILE"
+    echo "$selected" >"$PROFILE_FILE"
     echo "Profile '$selected' selected."
     echo ""
 
@@ -106,7 +108,7 @@ init() {
             fi
             ;;
         Linux*)
-            aliases_file="$HOME/.bash_aliases"  # Linux and WSL
+            aliases_file="$HOME/.bash_aliases" # Linux and WSL
             ;;
         *)
             echo "Unknown OS — add alias manually:"
@@ -121,7 +123,8 @@ init() {
     existing_line=$(grep -E "^alias [^=]+='${REPO_DIR}/claude\.sh'" "$aliases_file" 2>/dev/null || true)
 
     if [[ -n "$existing_line" ]]; then
-        existing_name=$(echo "$existing_line" | sed "s/^alias \([^=]*\)=.*/\1/")
+        existing_name="${existing_line#alias }"
+        existing_name="${existing_name%%=*}"
         echo "Found existing alias for this install:"
         echo "  $existing_line"
         read -rp "Alias name [${existing_name}]: " alias_name
@@ -130,7 +133,7 @@ init() {
         [[ -z "$alias_name" ]] && alias_name="$existing_name"
         if [[ "$alias_name" != "$existing_name" ]]; then
             sed -i "/^alias ${existing_name}=/d" "$aliases_file"
-            echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >> "$aliases_file"
+            echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >>"$aliases_file"
             echo "Renamed to '${alias_name}'."
         fi
     else
@@ -141,7 +144,8 @@ init() {
         if [[ -n "$alias_name" ]]; then
             alias_line="alias ${alias_name}='${REPO_DIR}/claude.sh'"
             if grep -qE "^alias ${alias_name}=" "$aliases_file" 2>/dev/null; then
-                local conflict; conflict=$(grep -E "^alias ${alias_name}=" "$aliases_file")
+                local conflict
+                conflict=$(grep -E "^alias ${alias_name}=" "$aliases_file")
                 echo "Name '${alias_name}' already used:"
                 echo "  $conflict"
                 read -rp "Overwrite it? [y/N]: " overwrite
@@ -150,7 +154,7 @@ init() {
                     echo "Updated."
                 fi
             else
-                echo "$alias_line" >> "$aliases_file"
+                echo "$alias_line" >>"$aliases_file"
                 echo "Added."
             fi
         fi
@@ -167,7 +171,8 @@ init() {
     printf "  %-20s %s\n" "Profile:" "$selected"
     printf "  %-20s %s\n" "Default Auth:" "${DEFAULT_AUTH:-apikey}"
     if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-        local key_mask; key_mask=$(printf '%*s' "${#ANTHROPIC_API_KEY}" '' | tr ' ' '*')
+        local key_mask
+        key_mask=$(printf '%*s' "${#ANTHROPIC_API_KEY}" '' | tr ' ' '*')
         printf "  %-20s %s\n" "API Key:" "$key_mask"
     fi
     [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && printf "  %-20s %s\n" "Gateway:" "$ANTHROPIC_BASE_URL"
@@ -236,9 +241,15 @@ do_reset() {
 
 # Handle early flags before profile/env loading
 case "${1:-}" in
-    --help|-h)    usage; exit 0 ;;
-    --version|-v) echo "claude-sandbox $VERSION"; exit 0 ;;
-    --reset)      do_reset ;;
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    --version | -v)
+        echo "claude-sandbox $VERSION"
+        exit 0
+        ;;
+    --reset) do_reset ;;
 esac
 
 if [[ ! -f "$PROFILE_FILE" ]]; then
@@ -247,9 +258,9 @@ if [[ ! -f "$PROFILE_FILE" ]]; then
 fi
 
 PROFILE=$(cat "$PROFILE_FILE")
-PROFILE_DIR="$REPO_DIR/profiles/$PROFILE"
 ENV_FILE="$REPO_DIR/.env"
 
+# shellcheck disable=SC1090  # dynamically generated, gitignored file — no static path to follow
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
 
 CONTAINER_HOME="/home/${CONTAINER_USER:-$(id -un)}"
@@ -261,17 +272,48 @@ CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --auth=*)    AUTH="${1#--auth=}"; shift ;;
-        --auth)      AUTH="$2"; shift 2 ;;
-        --model=*)   MODEL_OVERRIDE="${1#--model=}"; shift ;;
-        --model)     MODEL_OVERRIDE="$2"; shift 2 ;;
-        --workdir=*) WORKDIR_OVERRIDE="${1#--workdir=}"; shift ;;
-        --workdir)   WORKDIR_OVERRIDE="$2"; shift 2 ;;
-        --reset)     do_reset ;;
-        --help|-h)   usage; exit 0 ;;
-        --version|-v) echo "claude-sandbox $VERSION"; exit 0 ;;
-        --)          shift; CLAUDE_ARGS+=("$@"); break ;;
-        *)           CLAUDE_ARGS+=("$1"); shift ;;
+        --auth=*)
+            AUTH="${1#--auth=}"
+            shift
+            ;;
+        --auth)
+            AUTH="$2"
+            shift 2
+            ;;
+        --model=*)
+            MODEL_OVERRIDE="${1#--model=}"
+            shift
+            ;;
+        --model)
+            MODEL_OVERRIDE="$2"
+            shift 2
+            ;;
+        --workdir=*)
+            WORKDIR_OVERRIDE="${1#--workdir=}"
+            shift
+            ;;
+        --workdir)
+            WORKDIR_OVERRIDE="$2"
+            shift 2
+            ;;
+        --reset) do_reset ;;
+        --help | -h)
+            usage
+            exit 0
+            ;;
+        --version | -v)
+            echo "claude-sandbox $VERSION"
+            exit 0
+            ;;
+        --)
+            shift
+            CLAUDE_ARGS+=("$@")
+            break
+            ;;
+        *)
+            CLAUDE_ARGS+=("$1")
+            shift
+            ;;
     esac
 done
 
@@ -285,14 +327,14 @@ fi
 # Docker GID: detect on Linux/WSL, skip on macOS (Docker Desktop handles it)
 DOCKER_GID=""
 case "$(uname -s)" in
-    Linux*)  DOCKER_GID=$(getent group docker | cut -d: -f3 2>/dev/null || echo "984") ;;
+    Linux*) DOCKER_GID=$(getent group docker | cut -d: -f3 2>/dev/null || echo "984") ;;
     Darwin*) ;;
 esac
 
 # Image name from profile
 case "$PROFILE" in
     omc) IMAGE="claude-code:omc" ;;
-    *)   IMAGE="claude-code:base" ;;
+    *) IMAGE="claude-code:base" ;;
 esac
 
 DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
@@ -310,7 +352,10 @@ DOCKER_ARGS+=(--pids-limit 256)
 [[ -n "${DOCKER_GID:-}" ]] && DOCKER_ARGS+=(--group-add "$DOCKER_GID")
 
 if [[ "$AUTH" == "apikey" ]]; then
-    [[ -z "${ANTHROPIC_API_KEY:-}" ]] && { echo "Error: ANTHROPIC_API_KEY not set in .env"; exit 1; }
+    [[ -z "${ANTHROPIC_API_KEY:-}" ]] && {
+        echo "Error: ANTHROPIC_API_KEY not set in .env"
+        exit 1
+    }
     DOCKER_ARGS+=(-e "ANTHROPIC_AUTH_TOKEN=$ANTHROPIC_API_KEY")
     [[ -n "${ANTHROPIC_BASE_URL:-}" ]] && DOCKER_ARGS+=(-e "ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL")
     DOCKER_ARGS+=(-e "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1")

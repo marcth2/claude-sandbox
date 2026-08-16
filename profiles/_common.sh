@@ -13,7 +13,7 @@ common_detect_os() {
 
     DOCKER_GID=""
     case "$OS" in
-        linux|wsl)
+        linux | wsl)
             DOCKER_GID=$(getent group docker | cut -d: -f3 2>/dev/null || echo "984")
             echo "Docker GID: $DOCKER_GID"
             ;;
@@ -57,9 +57,9 @@ common_prompt_auth() {
         while IFS= read -r model; do
             [[ -n "$model" ]] && CLAUDE_MODELS+=("$model")
         done < <(curl -sf "$BASE_URL/v1/models" \
-            -H "Authorization: Bearer $API_KEY" 2>/dev/null | \
-            grep -oE '"id" *: *"claude[^"]*"' | \
-            grep -oE 'claude[^"]+' | \
+            -H "Authorization: Bearer $API_KEY" 2>/dev/null |
+            grep -oE '"id" *: *"claude[^"]*"' |
+            grep -oE 'claude[^"]+' |
             sort -r)
 
         if [[ ${#CLAUDE_MODELS[@]} -gt 0 ]]; then
@@ -127,7 +127,7 @@ common_prompt_git() {
 }
 
 common_write_env() {
-    cat > "$ENV_FILE" <<EOF
+    cat >"$ENV_FILE" <<EOF
 # Auth
 DEFAULT_AUTH=${AUTH_MODE}
 ANTHROPIC_API_KEY=${API_KEY}
@@ -164,7 +164,7 @@ common_seed_home() {
     mkdir -p "$HOME_DIR/.claude"
 
     if [[ -n "${GIT_USER_NAME:-}" && -n "${GIT_USER_EMAIL:-}" ]]; then
-        cat > "$HOME_DIR/.gitconfig" <<EOF
+        cat >"$HOME_DIR/.gitconfig" <<EOF
 [user]
     name = $GIT_USER_NAME
     email = $GIT_USER_EMAIL
