@@ -403,7 +403,7 @@ exec docker compose -f "$PROFILE_DIR/docker-compose.yml" "${DOCKER_ARGS[@]}" cla
 - ~~Closing summary in `claude.sh` didn't show git identity~~ — now reads `.home/.gitconfig` back (the actual artifact `setup.sh` wrote, not `.env`, since git identity was never stored there) and prints `Git identity: Name <email>`, or a warning that commits will fail if it was skipped
 
 **Pending for next session:**
-- None — Phase 1 is stable across all 3 profiles. Next up is Phase 2 (architectural review via OMC/aihero dogfooding), then Phase 4 (MCP servers: Jira/Confluence and AWS scoping, Laravel Boost scope deferred until other Phase 4 servers are further along).
+- None — Phase 1 is stable across all 3 profiles. Phase 2 was superseded (decisions captured inline in CLAUDE.md as they were made) and Phase 3 (docs) is done. Phase 4 (MCP servers) is a candidate for a future minor release — no active work.
 
 ---
 
@@ -493,17 +493,16 @@ If this proves noisy, escalate to Option B: add `--add-host apigw-pr.telus.com:0
 
 ---
 
-## Phase 2 — Architectural Review (deferred)
+## Phase 2 — Architectural Review (superseded)
 
-Run an architectural review of the project using OMC (omc profile) and aihero (aihero profile) — using the tool itself to review its own design. Goals:
-
-- Validate the profile/image split, `.home/` isolation, and auth injection approach
-- Identify any security, usability, or portability gaps
-- Produce a list of recommendations to carry into Phase 3/4
+Originally scoped as a dedicated review pass using OMC/aihero dogfooding. Superseded — the
+intended goals (validating the profile/image split, `.home/` isolation, and auth injection
+approach) were instead resolved inline as design decisions were made; see CLAUDE.md's "Key design
+decisions" section.
 
 ---
 
-## Phase 3 — Documentation (deferred)
+## Phase 3 — Documentation (done)
 
 Author two files:
 
