@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.1] — 2026-08-17
+
+### Fixed
+
+- `/gh-login` skill: `gh auth status`'s expected "not logged in yet" state (the normal case on a
+  fresh container) no longer renders as a raw `Error: Exit code 1` tool block before Claude's own
+  reassuring follow-up appears — the check now always exits 0 and the skill is told explicitly
+  that this is the expected first-run state, not a failure.
+
+### Docs
+
+- Removed "prototype improvements to the install script's UX and output formatting" from the
+  roadmap in CLAUDE.md — actioned by the setup-UX dashboard synthesis shipped in 1.1.0.
+
 ## [1.1.0] — 2026-08-17
 
 Redesigned first-run setup UX: a single arrow-key-navigable dashboard replaces the old
