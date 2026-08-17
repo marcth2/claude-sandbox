@@ -97,8 +97,10 @@ claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
   --workdir=<path>    Override working directory for this invocation
   --confirm           Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
-  --recover           Wipe and rebuild .env/.home/ for this checkout — see
-                      "Recovering" below
+  --fresh             Wipe and rebuild .env/.home/ for this checkout — see
+                      "Starting fresh" below
+  --update            Rebuild the Docker image only (no cache) — see
+                      "Updating" below
   --help, -h          Show this help and exit
   --version, -v       Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
@@ -107,16 +109,27 @@ claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
 Anything after `--` (or any unrecognized flag) is passed straight through to the `claude` binary
 inside the container — e.g. `claude-sandbox -- --help` shows Claude Code's own help.
 
-## Recovering
+## Starting fresh
 
 ```bash
-./claude.sh --recover
+./claude.sh --fresh
 ```
 
 For when setup broke partway (interrupted image build, corrupted `.home/`, etc.) — wipes `.env` and
 `.home/` after a typed confirmation, then re-runs setup for the profile this checkout is already
 locked to. It does **not** let you pick a different profile; to use a different profile, clone the
 repo again into a separate directory.
+
+## Updating
+
+```bash
+./claude.sh --update
+```
+
+Rebuilds the Docker image from scratch (no cache) for the profile this checkout is locked to —
+without touching `.env` or `.home/`. Use this to pick up a newer Claude Code release; a plain
+rebuild wouldn't do it, since Docker's layer cache would just reuse the old `npm install -g`
+layer.
 
 ## `.env` schema
 

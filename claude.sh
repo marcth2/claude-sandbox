@@ -27,10 +27,14 @@ Options:
   --workdir=<path>    Override working directory for this invocation
   --confirm           Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
-  --recover           Wipe and rebuild .env and .home/ for this checkout's
+  --fresh             Wipe and rebuild .env and .home/ for this checkout's
                       already-selected profile (requires confirmation). Does
                       NOT let you change profiles — clone the repo again for
                       that.
+  --update            Rebuild the Docker image from scratch (no cache) for
+                      this checkout's already-selected profile. Does NOT
+                      touch .env or .home/ — use this to pick up a newer
+                      Claude Code release without losing local config.
   --help, -h          Show this help and exit
   --version, -v       Show claude-sandbox version and exit
   --                  Pass all following args directly to the claude binary
@@ -267,9 +271,9 @@ init() {
     echo "============================================================"
 }
 
-do_recover() {
+do_fresh() {
     if [[ ! -f "$PROFILE_FILE" ]]; then
-        echo "Error: no profile selected yet — nothing to recover."
+        echo "Error: no profile selected yet — nothing to start fresh from."
         echo "Run '${REPO_DIR}/claude.sh' to set up a profile first."
         exit 1
     fi
@@ -280,12 +284,12 @@ do_recover() {
     if [[ ! -f "$REPO_DIR/profiles/$profile/setup.sh" ]]; then
         echo "Error: profile '$profile' no longer exists in this checkout"
         echo "(profiles/$profile/setup.sh not found)."
-        echo "Recovery can't re-run setup for a profile that's gone. Clone the"
-        echo "repo again to pick a currently available profile."
+        echo "Can't start fresh for a profile that's gone. Clone the repo"
+        echo "again to pick a currently available profile."
         exit 1
     fi
 
-    echo "=== Claude Docker — Recover ==="
+    echo "=== Claude Docker — Fresh ==="
     echo ""
     echo "This will permanently delete and re-create:"
     echo "  $REPO_DIR/.env"
@@ -307,7 +311,55 @@ do_recover() {
     echo ""
     bash "$REPO_DIR/profiles/$profile/setup.sh"
     echo ""
-    echo "Recovery complete. Run '${REPO_DIR}/claude.sh' to launch."
+    echo "Fresh setup complete. Run '${REPO_DIR}/claude.sh' to launch."
+    exit 0
+}
+
+do_update() {
+    if [[ ! -f "$PROFILE_FILE" ]]; then
+        echo "Error: no profile selected yet — nothing to update."
+        echo "Run '${REPO_DIR}/claude.sh' to set up a profile first."
+        exit 1
+    fi
+
+    local profile
+    profile=$(cat "$PROFILE_FILE")
+
+    if [[ ! -f "$REPO_DIR/profiles/$profile/docker-compose.yml" ]]; then
+        echo "Error: profile '$profile' no longer exists in this checkout"
+        echo "(profiles/$profile/docker-compose.yml not found)."
+        exit 1
+    fi
+
+    if [[ ! -f "$REPO_DIR/.env" ]]; then
+        echo "Error: no .env found. Run '${REPO_DIR}/claude.sh' to complete"
+        echo "first-run setup before updating the image."
+        exit 1
+    fi
+
+    PROFILE_DIR="$REPO_DIR/profiles/$profile"
+    ENV_FILE="$REPO_DIR/.env"
+    HOME_DIR="$REPO_DIR/.home"
+    # shellcheck source=profiles/_common.sh
+    source "$REPO_DIR/profiles/_common.sh"
+    # shellcheck disable=SC1090  # .env is gitignored, written by first-run setup — no static path to follow
+    source "$ENV_FILE"
+
+    DOCKER_GID=""
+    case "$(uname -s)" in
+        Linux*) DOCKER_GID=$(getent group docker | cut -d: -f3 2>/dev/null || echo "984") ;;
+    esac
+
+    echo "=== Claude Docker — Update ==="
+    echo ""
+    echo "Rebuilding the '$profile' Docker image from scratch (no cache)."
+    echo ".env and .home/ are untouched — this only refreshes the image."
+    echo ""
+
+    common_build_image --no-cache
+
+    echo ""
+    echo "Update complete. Run '${REPO_DIR}/claude.sh' to launch with the refreshed image."
     exit 0
 }
 
@@ -321,7 +373,8 @@ case "${1:-}" in
         echo "claude-sandbox $VERSION"
         exit 0
         ;;
-    --recover) do_recover ;;
+    --fresh) do_fresh ;;
+    --update) do_update ;;
 esac
 
 if [[ ! -f "$PROFILE_FILE" ]]; then
@@ -373,7 +426,8 @@ while [[ $# -gt 0 ]]; do
             CONFIRM=true
             shift
             ;;
-        --recover) do_recover ;;
+        --fresh) do_fresh ;;
+        --update) do_update ;;
         --help | -h)
             usage
             exit 0
@@ -459,7 +513,8 @@ if ! docker image inspect "$IMAGE" &>/dev/null; then
     echo "Error: Docker image '$IMAGE' not found."
     echo "Setup may have been interrupted before the build completed."
     echo ""
-    echo "Run: ./claude.sh --recover  (rebuilds .env/.home/ for the '$PROFILE' profile)"
+    echo "Run: ./claude.sh --update  (rebuilds just the image), or"
+    echo "     ./claude.sh --fresh   (wipes and re-runs full setup for the '$PROFILE' profile)"
     exit 1
 fi
 

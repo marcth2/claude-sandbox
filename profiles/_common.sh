@@ -969,9 +969,12 @@ EOF
 }
 
 common_build_image() {
+    local cache_flag=""
+    [[ "${1:-}" == "--no-cache" ]] && cache_flag="--no-cache"
     echo ""
     echo "Building Docker image..."
-    docker compose -f "$PROFILE_DIR/docker-compose.yml" build \
+    # shellcheck disable=SC2086  # cache_flag is either empty or the literal word --no-cache, never user input
+    docker compose -f "$PROFILE_DIR/docker-compose.yml" build $cache_flag \
         --build-arg DOCKER_GID="${DOCKER_GID:-984}" \
         --build-arg USERNAME="$CONTAINER_USER" \
         --build-arg USER_UID="$CONTAINER_UID" \
