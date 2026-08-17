@@ -55,124 +55,167 @@ _profile_desc() {
     esac
 }
 
+# --- init() helpers -------------------------------------------------------
+# Kept as top-level functions (not nested in init()) using a small set of
+# global _INIT_* scratch variables, the same pattern profiles/_common.sh's
+# dashboard uses for its own state — avoids relying on bash's dynamic
+# scoping of init()'s locals, which static tools like shellcheck can't see
+# through.
+
+declare -A _INIT_ROW_START=()
+declare -A _INIT_ROW_COUNT=()
+
+# Recomputes the profile-picker box's interior content top to bottom and
+# records where each row starts (_INIT_ROW_START) and how many physical
+# lines it currently occupies (_INIT_ROW_COUNT) — mirrors _dash_layout in
+# profiles/_common.sh so a long profile description would wrap safely too.
+_init_layout_profiles() {
+    _INIT_LINES=()
+    ui_box_compose "${UI_BOLD}${UI_BLUE}claude-sandbox — First-Run Setup${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose "${UI_DIM}Up/Down move   Enter selects${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose ""
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+
+    local i marker label
+    for ((i = 0; i < ${#_INIT_PROFILES[@]}; i++)); do
+        marker="  "
+        if ((i == _INIT_SEL)); then
+            marker="${UI_BOLD}${UI_BLUE}> ${UI_RESET}"
+        fi
+        label="${_INIT_PROFILES[$i]}"
+        if [[ -n "${_INIT_DESCS[$i]}" ]]; then
+            label="$label — ${_INIT_DESCS[$i]}"
+        fi
+        ui_box_compose "$(printf '%s%s' "$marker" "$label")"
+        _INIT_ROW_START[$i]=${#_INIT_LINES[@]}
+        _INIT_ROW_COUNT[$i]=${#UI_BOX_LINES[@]}
+        _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    done
+
+    ui_box_compose ""
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose "${UI_DIM}Locked for this checkout — no --profile override. Clone the repo again for another.${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    return 0
+}
+
+_init_draw_full() {
+    _init_layout_profiles
+    clear
+    ui_box_top
+    local i n=${#_INIT_LINES[@]}
+    for ((i = 0; i < n; i++)); do
+        tput cup $((i + 1)) 0 2>/dev/null || true
+        printf '%s' "${_INIT_LINES[$i]}"
+    done
+    tput cup $((n + 1)) 0 2>/dev/null || true
+    ui_box_bottom
+    return 0
+}
+
+# Redraws just one profile row in place, at its last-computed position — used
+# for pure Up/Down movement so navigating the picker doesn't repaint (and
+# flicker) the whole box. Same technique as _dash_redraw_row.
+_init_redraw_row() {
+    local i="$1" marker label
+    marker="  "
+    if ((i == _INIT_SEL)); then
+        marker="${UI_BOLD}${UI_BLUE}> ${UI_RESET}"
+    fi
+    label="${_INIT_PROFILES[$i]}"
+    if [[ -n "${_INIT_DESCS[$i]}" ]]; then
+        label="$label — ${_INIT_DESCS[$i]}"
+    fi
+    ui_box_compose "$(printf '%s%s' "$marker" "$label")"
+    local start="${_INIT_ROW_START[$i]}" j n=${#UI_BOX_LINES[@]}
+    for ((j = 0; j < n; j++)); do
+        tput cup $((start + j + 1)) 0 2>/dev/null || true
+        tput el 2>/dev/null || true
+        printf '%s' "${UI_BOX_LINES[$j]}"
+    done
+    return 0
+}
+
 init() {
-    echo "=== Claude Docker — First Run Setup ==="
+    # shellcheck source=profiles/_common.sh
+    source "$REPO_DIR/profiles/_common.sh"
+    ui_init
+
+    echo "${UI_BOLD}claude-sandbox — First-Run Setup${UI_RESET}"
     echo ""
 
     # Fixed display order; vanilla is the plain baseline and the default
     local ordered=(vanilla omc aihero)
-
-    local profiles=()
-    echo "Available profiles:"
-    local i=1
+    _INIT_PROFILES=()
+    _INIT_DESCS=()
+    local name desc d
     for name in "${ordered[@]}"; do
         [[ -d "$REPO_DIR/profiles/$name" ]] || continue
-        profiles+=("$name")
-        local desc
         desc="$(_profile_desc "$name")"
-        echo "  $i) $name${desc:+ — $desc}"
-        ((i++))
+        _INIT_PROFILES+=("$name")
+        _INIT_DESCS+=("$desc")
     done
     # Any unrecognized profiles not in the ordered list
     for d in "$REPO_DIR/profiles"/*/; do
-        local name
         name="$(basename "$d")"
         [[ " ${ordered[*]} " == *" $name "* ]] && continue
-        profiles+=("$name")
-        echo "  $i) $name"
-        ((i++))
+        _INIT_PROFILES+=("$name")
+        _INIT_DESCS+=("")
     done
 
-    echo ""
-    echo "Note: this choice is locked for this checkout — there's no --profile override or way to"
-    echo "switch later. To use a different profile, clone the repo again into another directory."
-    echo ""
-    read -rp "Select profile [1]: " choice
-    choice="${choice:-1}"
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#profiles[@]})); then
-        echo "Invalid selection — defaulting to 1."
-        choice=1
-    fi
-    local idx=$((choice - 1))
-    local selected="${profiles[$idx]}"
-    echo "$selected" >"$PROFILE_FILE"
-    echo "Profile '$selected' selected — locked for this checkout."
-    echo ""
+    _INIT_SEL=0
+    ui_alt_enter
+    _init_draw_full
+    local key done_sel="" old_sel
+    while [[ -z "$done_sel" ]]; do
+        key=$(ui_read_key)
+        case "$key" in
+            UP)
+                old_sel=$_INIT_SEL
+                _INIT_SEL=$(((_INIT_SEL - 1 + ${#_INIT_PROFILES[@]}) % ${#_INIT_PROFILES[@]}))
+                _init_redraw_row "$old_sel"
+                _init_redraw_row "$_INIT_SEL"
+                ;;
+            DOWN)
+                old_sel=$_INIT_SEL
+                _INIT_SEL=$(((_INIT_SEL + 1) % ${#_INIT_PROFILES[@]}))
+                _init_redraw_row "$old_sel"
+                _init_redraw_row "$_INIT_SEL"
+                ;;
+            ENTER) done_sel=1 ;;
+            *) : ;;
+        esac
+    done
+    ui_alt_exit
 
+    local selected="${_INIT_PROFILES[$_INIT_SEL]}"
+    echo "$selected" >"$PROFILE_FILE"
+    echo ""
+    echo "${UI_GREEN}Profile '$selected' selected${UI_RESET} — locked for this checkout."
+
+    # The shell-alias prompt used to run here, before setup.sh. It's now the
+    # last dashboard row (right before CONFIRM) inside profiles/_common.sh's
+    # _common_ensure_dashboard — see that file's _dash_apply_alias for why
+    # (its resolved name/rc-file are handed back via the .claude-alias
+    # marker file read below, not a shared variable).
     bash "$REPO_DIR/profiles/$selected/setup.sh"
 
-    # Alias setup — one place for all profiles
-    echo ""
-
-    # Pick shell config file based on OS and default shell
-    # WSL/macOS paths are untested — logic based on standard conventions
-    local aliases_file
-    case "$(uname -s)" in
-        Darwin*)
-            if [[ "${SHELL:-}" == */zsh ]]; then
-                aliases_file="$HOME/.zshrc"
-            else
-                aliases_file="$HOME/.bash_profile"
-            fi
-            ;;
-        Linux*)
-            aliases_file="$HOME/.bash_aliases" # Linux and WSL
-            ;;
-        *)
-            echo "Unknown OS — add alias manually:"
-            echo "  alias <name>='${REPO_DIR}/claude.sh'"
-            return 0
-            ;;
-    esac
-
-    local alias_name alias_line existing_line existing_name
-
-    # Search by repo path — finds entry regardless of alias name chosen last time
-    existing_line=$(grep -E "^alias [^=]+='${REPO_DIR}/claude\.sh'" "$aliases_file" 2>/dev/null || true)
-
-    if [[ -n "$existing_line" ]]; then
-        existing_name="${existing_line#alias }"
-        existing_name="${existing_name%%=*}"
-        echo "Found existing alias for this install:"
-        echo "  $existing_line"
-        read -rp "Alias name [${existing_name}]: " alias_name
-        alias_name="${alias_name:-$existing_name}"
-        alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
-        [[ -z "$alias_name" ]] && alias_name="$existing_name"
-        if [[ "$alias_name" != "$existing_name" ]]; then
-            sed -i "/^alias ${existing_name}=/d" "$aliases_file"
-            echo "alias ${alias_name}='${REPO_DIR}/claude.sh'" >>"$aliases_file"
-            echo "Renamed to '${alias_name}'."
-        fi
-    else
-        read -rp "Alias name [claude-sandbox]: " alias_name
-        alias_name="${alias_name:-claude-sandbox}"
-        alias_name="${alias_name//[^a-zA-Z0-9_-]/}"
-        [[ -z "$alias_name" ]] && alias_name="claude-sandbox"
-        if [[ -n "$alias_name" ]]; then
-            alias_line="alias ${alias_name}='${REPO_DIR}/claude.sh'"
-            if grep -qE "^alias ${alias_name}=" "$aliases_file" 2>/dev/null; then
-                local conflict
-                conflict=$(grep -E "^alias ${alias_name}=" "$aliases_file")
-                echo "Name '${alias_name}' already used:"
-                echo "  $conflict"
-                read -rp "Overwrite it? [y/N]: " overwrite
-                if [[ "${overwrite,,}" == "y" ]]; then
-                    sed -i "s|^alias ${alias_name}=.*|${alias_line}|" "$aliases_file"
-                    echo "Updated."
-                fi
-            else
-                echo "$alias_line" >>"$aliases_file"
-                echo "Added."
-            fi
-        fi
-    fi
-
-    # Closing summary — source .env to read what setup wrote
+    # Closing summary — source .env to read what setup wrote, and the
+    # .claude-alias marker file for what the alias prompt (run inside
+    # setup.sh) decided.
     [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
+    local alias_name="" alias_rcfile=""
+    if [[ -f "$REPO_DIR/.claude-alias" ]]; then
+        {
+            read -r alias_name
+            read -r alias_rcfile
+        } <"$REPO_DIR/.claude-alias"
+    fi
     local launch_cmd="${alias_name:-$REPO_DIR/claude.sh}"
     echo ""
-    echo "=========================================="
+    echo "============================================================"
     echo "Setup complete!"
     echo ""
     echo "Configuration:"
@@ -195,6 +238,7 @@ init() {
         printf "  %-20s %s\n" "Default Workspace:" "\$PWD at runtime"
     fi
     [[ -n "${SSH_DIR:-}" ]] && printf "  %-20s %s\n" "SSH keys:" "$SSH_DIR"
+    [[ -n "$alias_name" ]] && printf "  %-20s %s\n" "Shell Alias:" "$alias_name"
     local gitconfig="$REPO_DIR/.home/.gitconfig"
     if [[ -f "$gitconfig" ]]; then
         local git_name git_email
@@ -211,12 +255,15 @@ init() {
         echo "  - Approve the org managed settings dialog (once per fresh .home/)"
     fi
     echo ""
-    [[ -n "${alias_name:-}" ]] && echo "Run: source $aliases_file"
-    echo "Run: $launch_cmd"
-    echo ""
-    echo "Once inside Claude Code, run /gh-login once to authenticate gh"
-    echo "(needed for git push / PR / issue operations from the container)."
-    echo "=========================================="
+    # /gh-login is passed as claude's first message so gh auth happens
+    # automatically on first launch — see profiles/_common.sh's
+    # common_seed_gh_skill for the skill this triggers.
+    if [[ -n "$alias_name" && -n "$alias_rcfile" ]]; then
+        echo "Run: source $alias_rcfile && $launch_cmd /gh-login"
+    else
+        echo "Run: $launch_cmd /gh-login"
+    fi
+    echo "============================================================"
 }
 
 do_recover() {
