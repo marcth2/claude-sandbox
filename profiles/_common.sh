@@ -408,7 +408,7 @@ _dash_compose_row() {
             elif [[ "$_DASH_ALIAS_ACTION" == "conflict" ]]; then
                 value="${UI_YELLOW}${ALIAS_NAME}${UI_RESET}   ${UI_DIM}[name already used elsewhere — Enter to resolve]${UI_RESET}"
             else
-                value="${ALIAS_NAME}   ${UI_DIM}[Enter: edit]${UI_RESET}"
+                value="${ALIAS_NAME:-(skip)}   ${UI_DIM}[Enter: edit]${UI_RESET}"
             fi
             ;;
         confirm)
@@ -631,9 +631,22 @@ _dash_edit_apikey() {
 # _DASH_ALIAS_RCFILE. An unrelated conflicting alias is left flagged as
 # "conflict" rather than silently resolved — _dash_edit_alias_name (or, if
 # the row is never revisited, _dash_try_confirm) decides what to do about it.
+# An empty $ALIAS_NAME is a deliberate "no alias" state (see
+# _dash_edit_alias_name) — same convention as ssh_dir's empty-means-skip —
+# and resolves to "remove" (an existing alias must be deleted) or "none"
+# (nothing was ever registered, so there's nothing to do).
 _dash_resolve_alias_action() {
     _DASH_ALIAS_OLD_NAME=""
     _DASH_ALIAS_CONFLICT_LINE=""
+    if [[ -z "$ALIAS_NAME" ]]; then
+        if [[ -n "$_DASH_ALIAS_EXISTING_NAME" ]]; then
+            _DASH_ALIAS_ACTION="remove"
+            _DASH_ALIAS_OLD_NAME="$_DASH_ALIAS_EXISTING_NAME"
+        else
+            _DASH_ALIAS_ACTION="none"
+        fi
+        return 0
+    fi
     if [[ -n "$_DASH_ALIAS_EXISTING_NAME" ]]; then
         if [[ "$ALIAS_NAME" == "$_DASH_ALIAS_EXISTING_NAME" ]]; then
             _DASH_ALIAS_ACTION="unchanged"
@@ -656,18 +669,18 @@ _dash_resolve_alias_action() {
 # rename/existing-alias/name-conflict resolution claude.sh's old standalone
 # alias prompt used to do — folded in here since the prompt itself now lives
 # in this row instead of its own screen. A name conflict with an unrelated
-# alias gets an inline y/n follow-up at the same row.
+# alias gets an inline y/n follow-up at the same row. Unlike _dash_edit_text,
+# an emptied-out result is NOT coerced back to the previous/default name —
+# blank is a real "no alias" state (mirrors ssh_dir's empty-means-skip),
+# resolved by _dash_resolve_alias_action into "remove" or "none".
 _dash_edit_alias_name() {
     local start="${_DASH_ROW_START[alias_name]}" input
     ui_cursor_show
     tput cup $((start + 1)) 0 2>/dev/null || true
     tput el 2>/dev/null || true
     _dash_edit_marker
-    read -e -r -i "$ALIAS_NAME" -p "Alias name: " input || true
+    read -e -r -i "$ALIAS_NAME" -p "Alias name (blank = no alias): " input || true
     input="${input//[^a-zA-Z0-9_-]/}"
-    if [[ -z "$input" ]]; then
-        input="$ALIAS_NAME"
-    fi
     ALIAS_NAME="$input"
     _dash_resolve_alias_action
 
@@ -705,6 +718,9 @@ _dash_apply_alias() {
             ;;
         add)
             echo "alias ${ALIAS_NAME}='${REPO_DIR}/claude.sh'" >>"$_DASH_ALIAS_RCFILE"
+            ;;
+        remove)
+            sed -i "/^alias ${_DASH_ALIAS_OLD_NAME}=/d" "$_DASH_ALIAS_RCFILE"
             ;;
         unchanged | skip | none | conflict) : ;;
     esac
