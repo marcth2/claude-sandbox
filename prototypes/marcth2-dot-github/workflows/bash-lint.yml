@@ -1,0 +1,46 @@
+# PROTOTYPE — throwaway artifact for wayfinder ticket #59, not production code.
+# Destined for marcth2/.github as .github/workflows/bash-lint.yml, called via
+# `workflow_call` from bash repos (starting with claude-sandbox, ticket #69).
+name: bash-lint
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    name: ShellCheck + shfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ubuntu-latest ships shellcheck preinstalled; shfmt does not, so it's
+      # built from source via `go install` (Go is also preinstalled) rather
+      # than pulling in a third-party setup-shfmt Action or pinning a binary
+      # release URL that would go stale.
+      - name: Install shfmt
+        run: go install mvdan.cc/sh/v3/cmd/shfmt@latest
+
+      - name: Find tracked shell scripts
+        id: files
+        run: |
+          mapfile -t files < <(git ls-files '*.sh')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No .sh files tracked — nothing to lint."
+            echo "has_files=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_files=true" >>"$GITHUB_OUTPUT"
+          printf '%s\n' "${files[@]}" >/tmp/shell-files.txt
+
+      - name: shellcheck
+        if: steps.files.outputs.has_files == 'true'
+        run: |
+          mapfile -t files </tmp/shell-files.txt
+          shellcheck -x "${files[@]}"
+
+      - name: shfmt -d
+        if: steps.files.outputs.has_files == 'true'
+        run: |
+          mapfile -t files </tmp/shell-files.txt
+          "$(go env GOPATH)/bin/shfmt" -i 4 -ci -d "${files[@]}"
