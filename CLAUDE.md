@@ -89,6 +89,11 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
   `./claude.sh --recover` re-runs setup for the locked profile in place, or a scoped `docker run`
   reproducing the relevant slice of `claude.sh`'s args. Changes to `profiles/_common.sh` or
   `claude.sh`'s docker args → smoke test all three profiles (shared code path).
+- Version bumps (`VERSION` + a `CHANGELOG.md` entry — see that file for what warrants one) also get
+  an annotated tag and a GitHub Release, so a stable point is clonable/checkoutable instead of only
+  `master` HEAD: `git tag -a vX.Y.Z -m '...' && git push --tags && gh release create vX.Y.Z
+  --notes-file <changelog-section>`. Release immutability is enabled on this repo, so a published
+  release's tag/assets can't be edited after the fact — get the notes right before publishing.
 
 ## Roadmap
 
