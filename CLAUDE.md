@@ -98,3 +98,5 @@ minor release, no active work yet:
 
 - MCP integrations (Confluence, Slack, Jira, AWS, etc.)
 - Support for adding new plugins/profiles beyond the current three
+- Bridge the host clipboard into claude-sandbox sessions so a copied image pastes correctly instead
+  of falling back to an unusable `file://` URI ([#71](https://github.com/marcth2/claude-sandbox/issues/71))
