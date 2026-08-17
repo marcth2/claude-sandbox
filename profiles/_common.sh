@@ -107,6 +107,7 @@ ui_mask() {
 # border. Built via parameter substitution, not `tr` — `tr` operates
 # byte-wise and can mangle multi-byte UTF-8 box-drawing characters under a
 # non-UTF-8 locale.
+# shellcheck disable=SC2120 # ch has a documented default; no caller needs to pass it
 ui_hline() {
     local ch="${1:-─}" n=$((UI_TOTAL_WIDTH - 2)) out
     printf -v out '%*s' "$n" ''
