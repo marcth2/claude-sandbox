@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.0] — 2026-08-17
+
+Redesigned first-run setup UX: a single arrow-key-navigable dashboard replaces the old
+"press Enter to accept every default" prompt sequence, synthesized from three prototype
+directions built and tested against the setup-UX map (issue #45).
+
+### Added
+
+- Setup Dashboard (`profiles/_common.sh`): one alt-screen, box-drawn dashboard listing every
+  first-run field — auth mode, API Gateway, API key, model, SSH key dir, workspace dir, git
+  identity, shell alias — navigable with Up/Down/Enter, with a reactive model fetch once an API
+  key is entered and CONFIRM blocked until required fields are set.
+- Dynamic, word-wrapping box UI (`ui_box_*` helpers): border width tracks terminal width up to
+  120 columns (down to a 56-column floor), wrapping long content instead of truncating it.
+- Shell alias creation folded into the dashboard as its own row, immediately before CONFIRM, with
+  true optional/skip semantics — clearing the field removes any existing alias rather than
+  falling back to the proposed default name.
+- Closing summary now reports the shell alias (when set) and combines the "source rc file" /
+  "launch" steps into one `Run: ... && ... /gh-login` line that auto-triggers the `/gh-login`
+  skill on first launch.
+
+### Changed
+
+- `claude.sh`'s profile picker uses the same partial-row-redraw technique as the dashboard,
+  removing the full-screen repaint flicker on arrow-key navigation.
+- API Gateway, API key, and model rows are editable regardless of default auth mode, so an
+  SSO-default setup can still configure an API key for occasional `--auth=apikey` runs;
+  validation at CONFIRM still only requires a key when auth mode is `apikey`.
+- "Base URL" row relabeled "API Gateway" to match the closing summary's existing "Gateway:" label.
+
+### Fixed
+
+- Alt-screen segments (profile picker, dashboard) restore the terminal via a crash/Ctrl-C-safe
+  `trap` instead of relying on the happy path to run `tput rmcup`.
+- Box border alignment under terminals whose `tput sgr0` emits a trailing charset-designation
+  escape, and under non-UTF-8 locales where multi-byte box-drawing/arrow glyphs were being
+  counted as raw bytes instead of characters.
+
 ## [1.0.0] — 2026-08-16
 
 Initial stable release. Dockerized Claude Code launcher with three profiles (`vanilla`, `omc`,
