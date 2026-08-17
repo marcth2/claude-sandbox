@@ -1,0 +1,10 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  bash-lint:
+    uses: marcth2/.github/.github/workflows/bash-lint.yml@main
