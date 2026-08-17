@@ -62,12 +62,22 @@ _profile_desc() {
 # scoping of init()'s locals, which static tools like shellcheck can't see
 # through.
 
-_init_draw_profiles() {
-    clear
-    ui_box_top
-    ui_box_line "${UI_BOLD}${UI_BLUE}claude-sandbox — First-Run Setup${UI_RESET}"
-    ui_box_line "${UI_DIM}Up/Down move   Enter selects${UI_RESET}"
-    ui_box_line ""
+declare -A _INIT_ROW_START=()
+declare -A _INIT_ROW_COUNT=()
+
+# Recomputes the profile-picker box's interior content top to bottom and
+# records where each row starts (_INIT_ROW_START) and how many physical
+# lines it currently occupies (_INIT_ROW_COUNT) — mirrors _dash_layout in
+# profiles/_common.sh so a long profile description would wrap safely too.
+_init_layout_profiles() {
+    _INIT_LINES=()
+    ui_box_compose "${UI_BOLD}${UI_BLUE}claude-sandbox — First-Run Setup${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose "${UI_DIM}Up/Down move   Enter selects${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose ""
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+
     local i marker label
     for ((i = 0; i < ${#_INIT_PROFILES[@]}; i++)); do
         marker="  "
@@ -78,126 +88,53 @@ _init_draw_profiles() {
         if [[ -n "${_INIT_DESCS[$i]}" ]]; then
             label="$label — ${_INIT_DESCS[$i]}"
         fi
-        ui_box_line "$(printf '%s%s' "$marker" "$label")"
+        ui_box_compose "$(printf '%s%s' "$marker" "$label")"
+        _INIT_ROW_START[$i]=${#_INIT_LINES[@]}
+        _INIT_ROW_COUNT[$i]=${#UI_BOX_LINES[@]}
+        _INIT_LINES+=("${UI_BOX_LINES[@]}")
     done
-    ui_box_line ""
-    ui_box_line "${UI_DIM}Locked for this checkout — no --profile override. Clone the repo again for another.${UI_RESET}"
-    ui_box_bottom
+
+    ui_box_compose ""
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
+    ui_box_compose "${UI_DIM}Locked for this checkout — no --profile override. Clone the repo again for another.${UI_RESET}"
+    _INIT_LINES+=("${UI_BOX_LINES[@]}")
     return 0
 }
 
-_init_draw_alias_box() {
+_init_draw_full() {
+    _init_layout_profiles
     clear
     ui_box_top
-    ui_box_line "${UI_BOLD}${UI_BLUE}claude-sandbox — Shell Alias${UI_RESET}"
-    ui_box_line "${UI_DIM}Pick a short command to launch claude-sandbox from your shell.${UI_RESET}"
+    local i n=${#_INIT_LINES[@]}
+    for ((i = 0; i < n; i++)); do
+        tput cup $((i + 1)) 0 2>/dev/null || true
+        printf '%s' "${_INIT_LINES[$i]}"
+    done
+    tput cup $((n + 1)) 0 2>/dev/null || true
     ui_box_bottom
     return 0
 }
 
-# Gathers alias name/action into _INIT_ALIAS_* globals. Pure input-gathering
-# — no file writes here (see _init_alias_apply) — so this is the part that
-# has to happen before the docker build, alongside the other prompts.
-_init_alias_gather() {
-    local aliases_file=""
-    case "$(uname -s)" in
-        Darwin*)
-            if [[ "${SHELL:-}" == */zsh ]]; then
-                aliases_file="$HOME/.zshrc"
-            else
-                aliases_file="$HOME/.bash_profile"
-            fi
-            ;;
-        Linux*)
-            aliases_file="$HOME/.bash_aliases" # Linux and WSL
-            ;;
-        *)
-            aliases_file="" # WSL/macOS paths are untested — logic based on standard conventions
-            ;;
-    esac
-    _INIT_ALIASES_FILE="$aliases_file"
-    _INIT_ALIAS_NAME=""
-    _INIT_ALIAS_ACTION="none"
-    _INIT_ALIAS_OLD_NAME=""
-
-    if [[ -z "$aliases_file" ]]; then
-        return 0
+# Redraws just one profile row in place, at its last-computed position — used
+# for pure Up/Down movement so navigating the picker doesn't repaint (and
+# flicker) the whole box. Same technique as _dash_redraw_row.
+_init_redraw_row() {
+    local i="$1" marker label
+    marker="  "
+    if ((i == _INIT_SEL)); then
+        marker="${UI_BOLD}${UI_BLUE}> ${UI_RESET}"
     fi
-
-    ui_cursor_show
-    echo ""
-    local existing_line existing_name
-    # Search by repo path — finds entry regardless of alias name chosen last time
-    existing_line=$(grep -E "^alias [^=]+='${REPO_DIR}/claude\.sh'" "$aliases_file" 2>/dev/null || true)
-
-    if [[ -n "$existing_line" ]]; then
-        existing_name="${existing_line#alias }"
-        existing_name="${existing_name%%=*}"
-        echo "Found existing alias for this install:"
-        echo "  $existing_line"
-        read -rp "Alias name [${existing_name}]: " _INIT_ALIAS_NAME
-        _INIT_ALIAS_NAME="${_INIT_ALIAS_NAME:-$existing_name}"
-        _INIT_ALIAS_NAME="${_INIT_ALIAS_NAME//[^a-zA-Z0-9_-]/}"
-        if [[ -z "$_INIT_ALIAS_NAME" ]]; then
-            _INIT_ALIAS_NAME="$existing_name"
-        fi
-        if [[ "$_INIT_ALIAS_NAME" != "$existing_name" ]]; then
-            _INIT_ALIAS_ACTION="rename"
-            _INIT_ALIAS_OLD_NAME="$existing_name"
-        fi
-    else
-        read -rp "Alias name [claude-sandbox]: " _INIT_ALIAS_NAME
-        _INIT_ALIAS_NAME="${_INIT_ALIAS_NAME:-claude-sandbox}"
-        _INIT_ALIAS_NAME="${_INIT_ALIAS_NAME//[^a-zA-Z0-9_-]/}"
-        if [[ -z "$_INIT_ALIAS_NAME" ]]; then
-            _INIT_ALIAS_NAME="claude-sandbox"
-        fi
-        if grep -qE "^alias ${_INIT_ALIAS_NAME}=" "$aliases_file" 2>/dev/null; then
-            local conflict
-            conflict=$(grep -E "^alias ${_INIT_ALIAS_NAME}=" "$aliases_file")
-            echo "Name '${_INIT_ALIAS_NAME}' already used:"
-            echo "  $conflict"
-            local overwrite=""
-            read -rp "Overwrite it? [y/N]: " overwrite
-            if [[ "${overwrite,,}" == "y" ]]; then
-                _INIT_ALIAS_ACTION="overwrite"
-            else
-                _INIT_ALIAS_ACTION="skip"
-            fi
-        else
-            _INIT_ALIAS_ACTION="add"
-        fi
+    label="${_INIT_PROFILES[$i]}"
+    if [[ -n "${_INIT_DESCS[$i]}" ]]; then
+        label="$label — ${_INIT_DESCS[$i]}"
     fi
-    ui_cursor_hide
-    return 0
-}
-
-# Applies whatever _init_alias_gather decided. Just a file write plus a
-# confirmation echo — not interactive — so it runs after ui_alt_exit, where
-# the confirmation lands in normal scrollback instead of being wiped when
-# the alt screen closes.
-_init_alias_apply() {
-    if [[ -z "$_INIT_ALIASES_FILE" ]]; then
-        echo "Unknown OS — add alias manually:"
-        echo "  alias <name>='${REPO_DIR}/claude.sh'"
-        return 0
-    fi
-    case "$_INIT_ALIAS_ACTION" in
-        rename)
-            sed -i "/^alias ${_INIT_ALIAS_OLD_NAME}=/d" "$_INIT_ALIASES_FILE"
-            echo "alias ${_INIT_ALIAS_NAME}='${REPO_DIR}/claude.sh'" >>"$_INIT_ALIASES_FILE"
-            echo "Renamed to '${_INIT_ALIAS_NAME}'."
-            ;;
-        overwrite)
-            sed -i "s|^alias ${_INIT_ALIAS_NAME}=.*|alias ${_INIT_ALIAS_NAME}='${REPO_DIR}/claude.sh'|" "$_INIT_ALIASES_FILE"
-            echo "Updated."
-            ;;
-        add)
-            echo "alias ${_INIT_ALIAS_NAME}='${REPO_DIR}/claude.sh'" >>"$_INIT_ALIASES_FILE"
-            echo "Added."
-            ;;
-        skip | none) : ;;
-    esac
+    ui_box_compose "$(printf '%s%s' "$marker" "$label")"
+    local start="${_INIT_ROW_START[$i]}" j n=${#UI_BOX_LINES[@]}
+    for ((j = 0; j < n; j++)); do
+        tput cup $((start + j + 1)) 0 2>/dev/null || true
+        tput el 2>/dev/null || true
+        printf '%s' "${UI_BOX_LINES[$j]}"
+    done
     return 0
 }
 
@@ -230,18 +167,22 @@ init() {
 
     _INIT_SEL=0
     ui_alt_enter
-    _init_draw_profiles
-    local key done_sel=""
+    _init_draw_full
+    local key done_sel="" old_sel
     while [[ -z "$done_sel" ]]; do
         key=$(ui_read_key)
         case "$key" in
             UP)
+                old_sel=$_INIT_SEL
                 _INIT_SEL=$(((_INIT_SEL - 1 + ${#_INIT_PROFILES[@]}) % ${#_INIT_PROFILES[@]}))
-                _init_draw_profiles
+                _init_redraw_row "$old_sel"
+                _init_redraw_row "$_INIT_SEL"
                 ;;
             DOWN)
+                old_sel=$_INIT_SEL
                 _INIT_SEL=$(((_INIT_SEL + 1) % ${#_INIT_PROFILES[@]}))
-                _init_draw_profiles
+                _init_redraw_row "$old_sel"
+                _init_redraw_row "$_INIT_SEL"
                 ;;
             ENTER) done_sel=1 ;;
             *) : ;;
@@ -254,23 +195,27 @@ init() {
     echo ""
     echo "${UI_GREEN}Profile '$selected' selected${UI_RESET} — locked for this checkout."
 
-    # Alias prompt happens here, up front with the rest of the interactive
-    # questions, not after the build — only the actual gathering needs to be
-    # interactive; _init_alias_apply is just a file write and runs right
-    # after so its confirmation message is visible in normal scrollback.
-    ui_alt_enter
-    _init_draw_alias_box
-    _init_alias_gather
-    ui_alt_exit
-    _init_alias_apply
-
+    # The shell-alias prompt used to run here, before setup.sh. It's now the
+    # last dashboard row (right before CONFIRM) inside profiles/_common.sh's
+    # _common_ensure_dashboard — see that file's _dash_apply_alias for why
+    # (its resolved name/rc-file are handed back via the .claude-alias
+    # marker file read below, not a shared variable).
     bash "$REPO_DIR/profiles/$selected/setup.sh"
 
-    # Closing summary — source .env to read what setup wrote
+    # Closing summary — source .env to read what setup wrote, and the
+    # .claude-alias marker file for what the alias prompt (run inside
+    # setup.sh) decided.
     [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
-    local launch_cmd="${_INIT_ALIAS_NAME:-$REPO_DIR/claude.sh}"
+    local alias_name="" alias_rcfile=""
+    if [[ -f "$REPO_DIR/.claude-alias" ]]; then
+        {
+            read -r alias_name
+            read -r alias_rcfile
+        } <"$REPO_DIR/.claude-alias"
+    fi
+    local launch_cmd="${alias_name:-$REPO_DIR/claude.sh}"
     echo ""
-    echo "=========================================="
+    echo "============================================================"
     echo "Setup complete!"
     echo ""
     echo "Configuration:"
@@ -293,6 +238,7 @@ init() {
         printf "  %-20s %s\n" "Default Workspace:" "\$PWD at runtime"
     fi
     [[ -n "${SSH_DIR:-}" ]] && printf "  %-20s %s\n" "SSH keys:" "$SSH_DIR"
+    [[ -n "$alias_name" ]] && printf "  %-20s %s\n" "Shell Alias:" "$alias_name"
     local gitconfig="$REPO_DIR/.home/.gitconfig"
     if [[ -f "$gitconfig" ]]; then
         local git_name git_email
@@ -309,14 +255,15 @@ init() {
         echo "  - Approve the org managed settings dialog (once per fresh .home/)"
     fi
     echo ""
-    if [[ -n "${_INIT_ALIAS_NAME:-}" && -n "${_INIT_ALIASES_FILE:-}" ]]; then
-        echo "Run: source $_INIT_ALIASES_FILE"
+    # /gh-login is passed as claude's first message so gh auth happens
+    # automatically on first launch — see profiles/_common.sh's
+    # common_seed_gh_skill for the skill this triggers.
+    if [[ -n "$alias_name" && -n "$alias_rcfile" ]]; then
+        echo "Run: source $alias_rcfile && $launch_cmd /gh-login"
+    else
+        echo "Run: $launch_cmd /gh-login"
     fi
-    echo "Run: $launch_cmd"
-    echo ""
-    echo "Once inside Claude Code, run /gh-login once to authenticate gh"
-    echo "(needed for git push / PR / issue operations from the container)."
-    echo "=========================================="
+    echo "============================================================"
 }
 
 do_recover() {

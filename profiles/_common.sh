@@ -323,9 +323,9 @@ declare -A _DASH_ROW_COUNT=()
 # false exit status never reaches `set -e`.
 _dash_row_enabled() {
     case "$1" in
-        base_url | api_key) [[ "$AUTH_MODE" == "apikey" ]] ;;
-        model) [[ "$AUTH_MODE" == "apikey" && -n "$API_KEY" ]] ;;
+        model) [[ -n "$API_KEY" ]] ;;
         git_email) [[ -n "$GIT_USER_NAME" ]] ;;
+        alias_name) [[ -n "$_DASH_ALIAS_RCFILE" ]] ;;
         *) return 0 ;;
     esac
 }
@@ -356,23 +356,17 @@ _dash_compose_row() {
             value="${AUTH_MODE}   ${UI_DIM}[Enter: toggle — a default only, override per run with --auth=sso|apikey]${UI_RESET}"
             ;;
         base_url)
-            label="Base URL"
-            if ((enabled)); then
-                value="${BASE_URL:-<none>}   ${UI_DIM}[Enter: cycle]${UI_RESET}"
-            else
-                value="${UI_DIM}(not used for sso)${UI_RESET}"
-            fi
+            label="API Gateway"
+            value="${BASE_URL:-<none>}   ${UI_DIM}[Enter: cycle]${UI_RESET}"
             ;;
         api_key)
             label="API Key"
-            if ((enabled)); then
-                if [[ -n "$API_KEY" ]]; then
-                    value="$(ui_mask "$API_KEY")   ${UI_GREEN}set${UI_RESET}"
-                else
-                    value="${UI_RED}(required — Enter to set)${UI_RESET}"
-                fi
+            if [[ -n "$API_KEY" ]]; then
+                value="$(ui_mask "$API_KEY")   ${UI_GREEN}set${UI_RESET}"
+            elif [[ "$AUTH_MODE" == "apikey" ]]; then
+                value="${UI_RED}(required — Enter to set)${UI_RESET}"
             else
-                value="${UI_DIM}(not used for sso)${UI_RESET}"
+                value="${UI_DIM}(optional — set to allow occasional --auth=apikey overrides)${UI_RESET}"
             fi
             ;;
         model)
@@ -383,8 +377,6 @@ _dash_compose_row() {
                 else
                     value="${ANTHROPIC_MODEL:-<none>}   ${UI_DIM}[Enter: edit]${UI_RESET}"
                 fi
-            elif [[ "$AUTH_MODE" == "sso" ]]; then
-                value="${UI_DIM}(select inside Claude Code with /model)${UI_RESET}"
             else
                 value="${UI_DIM}(enter API key first)${UI_RESET}"
             fi
@@ -407,6 +399,16 @@ _dash_compose_row() {
                 value="${GIT_USER_EMAIL:-(skip)}   ${UI_DIM}[Enter: edit]${UI_RESET}"
             else
                 value="${UI_DIM}(set git user.name first)${UI_RESET}"
+            fi
+            ;;
+        alias_name)
+            label="Shell Alias"
+            if ! ((enabled)); then
+                value="${UI_DIM}(unsupported OS — add manually: alias <name>='${REPO_DIR}/claude.sh')${UI_RESET}"
+            elif [[ "$_DASH_ALIAS_ACTION" == "conflict" ]]; then
+                value="${UI_YELLOW}${ALIAS_NAME}${UI_RESET}   ${UI_DIM}[name already used elsewhere — Enter to resolve]${UI_RESET}"
+            else
+                value="${ALIAS_NAME}   ${UI_DIM}[Enter: edit]${UI_RESET}"
             fi
             ;;
         confirm)
@@ -454,6 +456,11 @@ _dash_layout() {
 
     local id
     for id in "${_DASH_ROW_IDS[@]}"; do
+        # Blank spacer between the last question row and CONFIRM, so it
+        # reads as visually separate from the fields above it.
+        if [[ "$id" == "confirm" ]]; then
+            _dash_append ""
+        fi
         _dash_compose_row "$id"
         _DASH_ROW_START[$id]=${#_DASH_LINES[@]}
         _DASH_ROW_COUNT[$id]=${#UI_BOX_LINES[@]}
@@ -516,6 +523,17 @@ _dash_move() {
     return 0
 }
 
+# Prints the left border plus the same 2-character marker column a selected
+# row's normal (non-editing) display uses. Without this, dropping into
+# edit mode would print just the border ("│ ") and the edited row's text
+# would start 2 columns to the left of where it sits once editing ends —
+# every row being edited IS the selected row, so the marker is always the
+# selected (bold blue "> ") one.
+_dash_edit_marker() {
+    printf '%s│%s %s%s> %s' "$UI_BLUE" "$UI_RESET" "$UI_BOLD" "$UI_BLUE" "$UI_RESET"
+    return 0
+}
+
 # Edits a plain-text row in place: shows the cursor, drops into cooked-mode
 # `read -e` right under the box's left border at that row's position, then
 # hides the cursor again. varname is a global set by common_prompt_auth's
@@ -528,7 +546,7 @@ _dash_edit_text() {
     ui_cursor_show
     tput cup $((start + 1)) 0 2>/dev/null || true
     tput el 2>/dev/null || true
-    printf '%s│%s ' "$UI_BLUE" "$UI_RESET"
+    _dash_edit_marker
     read -e -r -i "$_dash_target" -p "${label}: " _dash_target || true
     ui_cursor_hide
     return 0
@@ -539,7 +557,7 @@ _dash_edit_sshdir() {
     ui_cursor_show
     tput cup $((start + 1)) 0 2>/dev/null || true
     tput el 2>/dev/null || true
-    printf '%s│%s ' "$UI_BLUE" "$UI_RESET"
+    _dash_edit_marker
     read -e -r -i "${SSH_DIR:-$HOME/.ssh}" -p "SSH key directory ('skip' to omit mount): " input || true
     if [[ "${input,,}" == "skip" ]]; then
         SSH_DIR=""
@@ -561,7 +579,8 @@ _dash_fetch_models() {
     local start="${_DASH_ROW_START[model]}"
     tput cup $((start + 1)) 0 2>/dev/null || true
     tput el 2>/dev/null || true
-    printf '%s│%s   Model: %sfetching from %s...%s' "$UI_BLUE" "$UI_RESET" "$UI_DIM" "$BASE_URL" "$UI_RESET"
+    _dash_edit_marker
+    printf ' Model: %sfetching from %s...%s' "$UI_DIM" "$BASE_URL" "$UI_RESET"
     local model
     while IFS= read -r model; do
         if [[ -n "$model" ]]; then
@@ -596,7 +615,7 @@ _dash_edit_apikey() {
     if [[ -n "$API_KEY" ]]; then
         prompt="API Key (blank = keep current): "
     fi
-    printf '%s│%s ' "$UI_BLUE" "$UI_RESET"
+    _dash_edit_marker
     read -rs -p "$prompt" input || true
     echo ""
     if [[ -n "$input" ]]; then
@@ -607,11 +626,112 @@ _dash_edit_apikey() {
     return 0
 }
 
+# Non-interactively (re)resolves _DASH_ALIAS_ACTION/_DASH_ALIAS_OLD_NAME/
+# _DASH_ALIAS_CONFLICT_LINE for the current $ALIAS_NAME against
+# _DASH_ALIAS_RCFILE. An unrelated conflicting alias is left flagged as
+# "conflict" rather than silently resolved — _dash_edit_alias_name (or, if
+# the row is never revisited, _dash_try_confirm) decides what to do about it.
+_dash_resolve_alias_action() {
+    _DASH_ALIAS_OLD_NAME=""
+    _DASH_ALIAS_CONFLICT_LINE=""
+    if [[ -n "$_DASH_ALIAS_EXISTING_NAME" ]]; then
+        if [[ "$ALIAS_NAME" == "$_DASH_ALIAS_EXISTING_NAME" ]]; then
+            _DASH_ALIAS_ACTION="unchanged"
+        else
+            _DASH_ALIAS_ACTION="rename"
+            _DASH_ALIAS_OLD_NAME="$_DASH_ALIAS_EXISTING_NAME"
+        fi
+        return 0
+    fi
+    if grep -qE "^alias ${ALIAS_NAME}=" "$_DASH_ALIAS_RCFILE" 2>/dev/null; then
+        _DASH_ALIAS_CONFLICT_LINE=$(grep -E "^alias ${ALIAS_NAME}=" "$_DASH_ALIAS_RCFILE")
+        _DASH_ALIAS_ACTION="conflict"
+        return 0
+    fi
+    _DASH_ALIAS_ACTION="add"
+    return 0
+}
+
+# Edits the alias-name row in place, same as _dash_edit_text, but with the
+# rename/existing-alias/name-conflict resolution claude.sh's old standalone
+# alias prompt used to do — folded in here since the prompt itself now lives
+# in this row instead of its own screen. A name conflict with an unrelated
+# alias gets an inline y/n follow-up at the same row.
+_dash_edit_alias_name() {
+    local start="${_DASH_ROW_START[alias_name]}" input
+    ui_cursor_show
+    tput cup $((start + 1)) 0 2>/dev/null || true
+    tput el 2>/dev/null || true
+    _dash_edit_marker
+    read -e -r -i "$ALIAS_NAME" -p "Alias name: " input || true
+    input="${input//[^a-zA-Z0-9_-]/}"
+    if [[ -z "$input" ]]; then
+        input="$ALIAS_NAME"
+    fi
+    ALIAS_NAME="$input"
+    _dash_resolve_alias_action
+
+    if [[ "$_DASH_ALIAS_ACTION" == "conflict" ]]; then
+        local overwrite=""
+        tput cup $((start + 1)) 0 2>/dev/null || true
+        tput el 2>/dev/null || true
+        _dash_edit_marker
+        read -r -p "'$ALIAS_NAME' is already used ($_DASH_ALIAS_CONFLICT_LINE) — overwrite? [y/N]: " overwrite || true
+        if [[ "${overwrite,,}" == "y" ]]; then
+            _DASH_ALIAS_ACTION="overwrite"
+        else
+            _DASH_ALIAS_ACTION="skip"
+        fi
+    fi
+    ui_cursor_hide
+    return 0
+}
+
+# Applies whatever the alias_name row resolved: the actual rc-file write,
+# plus the $REPO_DIR/.claude-alias marker file claude.sh's closing summary
+# reads back purely for display (this runs inside the `bash setup.sh`
+# subprocess, so ALIAS_NAME/_DASH_ALIAS_RCFILE don't survive back into
+# claude.sh's own process — the same "write a file, read it back" pattern
+# claude.sh already uses for .env). Called once CONFIRM's other validation
+# has passed, right before _DASH_DONE is set.
+_dash_apply_alias() {
+    case "$_DASH_ALIAS_ACTION" in
+        rename)
+            sed -i "/^alias ${_DASH_ALIAS_OLD_NAME}=/d" "$_DASH_ALIAS_RCFILE"
+            echo "alias ${ALIAS_NAME}='${REPO_DIR}/claude.sh'" >>"$_DASH_ALIAS_RCFILE"
+            ;;
+        overwrite)
+            sed -i "s|^alias ${ALIAS_NAME}=.*|alias ${ALIAS_NAME}='${REPO_DIR}/claude.sh'|" "$_DASH_ALIAS_RCFILE"
+            ;;
+        add)
+            echo "alias ${ALIAS_NAME}='${REPO_DIR}/claude.sh'" >>"$_DASH_ALIAS_RCFILE"
+            ;;
+        unchanged | skip | none | conflict) : ;;
+    esac
+
+    local marker="$REPO_DIR/.claude-alias"
+    case "$_DASH_ALIAS_ACTION" in
+        add | rename | overwrite | unchanged)
+            printf '%s\n%s\n' "$ALIAS_NAME" "$_DASH_ALIAS_RCFILE" >"$marker"
+            ;;
+        *)
+            rm -f "$marker"
+            ;;
+    esac
+    return 0
+}
+
 _dash_try_confirm() {
     if [[ "$AUTH_MODE" == "apikey" && -z "$API_KEY" ]]; then
         _DASH_STATUS_MSG="API key is required for apikey auth mode — select the API Key row and press Enter to set it."
         return 0
     fi
+    # Left unresolved (row never revisited after a conflict was flagged) —
+    # don't touch an alias that isn't ours without explicit confirmation.
+    if [[ "$_DASH_ALIAS_ACTION" == "conflict" ]]; then
+        _DASH_ALIAS_ACTION="skip"
+    fi
+    _dash_apply_alias
     _DASH_STATUS_MSG=""
     _DASH_DONE=1
     return 0
@@ -632,30 +752,24 @@ _dash_activate_row() {
             fi
             ;;
         base_url)
-            if [[ "$AUTH_MODE" == "apikey" ]]; then
-                case "$_DASH_BASEURL_MODE" in
-                    fuelix)
-                        _DASH_BASEURL_MODE="anthropic"
-                        BASE_URL="https://api.anthropic.com"
-                        ;;
-                    anthropic)
-                        _DASH_BASEURL_MODE="custom"
-                        _dash_edit_text base_url "Base URL" BASE_URL
-                        ;;
-                    *)
-                        _DASH_BASEURL_MODE="fuelix"
-                        BASE_URL="https://api.fuelix.ai"
-                        ;;
-                esac
-            fi
+            case "$_DASH_BASEURL_MODE" in
+                fuelix)
+                    _DASH_BASEURL_MODE="anthropic"
+                    BASE_URL="https://api.anthropic.com"
+                    ;;
+                anthropic)
+                    _DASH_BASEURL_MODE="custom"
+                    _dash_edit_text base_url "API Gateway" BASE_URL
+                    ;;
+                *)
+                    _DASH_BASEURL_MODE="fuelix"
+                    BASE_URL="https://api.fuelix.ai"
+                    ;;
+            esac
             ;;
-        api_key)
-            if [[ "$AUTH_MODE" == "apikey" ]]; then
-                _dash_edit_apikey
-            fi
-            ;;
+        api_key) _dash_edit_apikey ;;
         model)
-            if [[ "$AUTH_MODE" == "apikey" && -n "$API_KEY" ]]; then
+            if [[ -n "$API_KEY" ]]; then
                 if ((${#_DASH_FETCHED_MODELS[@]} > 0)); then
                     _DASH_MODEL_IDX=$(((_DASH_MODEL_IDX + 1) % ${#_DASH_FETCHED_MODELS[@]}))
                     ANTHROPIC_MODEL="${_DASH_FETCHED_MODELS[$_DASH_MODEL_IDX]}"
@@ -670,6 +784,11 @@ _dash_activate_row() {
         git_email)
             if [[ -n "$GIT_USER_NAME" ]]; then
                 _dash_edit_text git_email "Git user.email" GIT_USER_EMAIL
+            fi
+            ;;
+        alias_name)
+            if [[ -n "$_DASH_ALIAS_RCFILE" ]]; then
+                _dash_edit_alias_name
             fi
             ;;
         confirm) _dash_try_confirm ;;
@@ -710,7 +829,25 @@ _common_ensure_dashboard() {
     GIT_USER_NAME="${GIT_USER_NAME:-$host_name}"
     GIT_USER_EMAIL="${GIT_USER_EMAIL:-$host_email}"
 
-    _DASH_ROW_IDS=(auth_mode base_url api_key model ssh_dir workdir git_name git_email confirm)
+    # Alias row init — search by repo path (not name) so an existing alias is
+    # found regardless of what name it was created under last time.
+    _DASH_ALIAS_RCFILE="$(_common_alias_rcfile)"
+    _DASH_ALIAS_EXISTING_NAME=""
+    local existing_line
+    if [[ -n "$_DASH_ALIAS_RCFILE" ]]; then
+        existing_line=$(grep -E "^alias [^=]+='${REPO_DIR}/claude\.sh'" "$_DASH_ALIAS_RCFILE" 2>/dev/null || true)
+        if [[ -n "$existing_line" ]]; then
+            _DASH_ALIAS_EXISTING_NAME="${existing_line#alias }"
+            _DASH_ALIAS_EXISTING_NAME="${_DASH_ALIAS_EXISTING_NAME%%=*}"
+        fi
+    fi
+    ALIAS_NAME="${_DASH_ALIAS_EXISTING_NAME:-claude-sandbox}"
+    _DASH_ALIAS_ACTION="none"
+    if [[ -n "$_DASH_ALIAS_RCFILE" ]]; then
+        _dash_resolve_alias_action
+    fi
+
+    _DASH_ROW_IDS=(auth_mode base_url api_key model ssh_dir workdir git_name git_email alias_name confirm)
     _DASH_SEL=0
     _DASH_STATUS_MSG=""
     _DASH_DONE=""
@@ -743,6 +880,38 @@ _common_ensure_dashboard() {
     if [[ -z "$GIT_USER_NAME" ]]; then
         GIT_USER_EMAIL=""
     fi
+
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Shell alias handling. The alias_name dashboard row (see _dash_edit_alias_name/
+# _dash_resolve_alias_action/_dash_apply_alias above) resolves and applies the
+# alias entirely inside the dashboard, right before CONFIRM — this runs inside
+# the `bash setup.sh` subprocess, so the resolved name/rc-file don't survive
+# back into claude.sh's own process for the closing summary. Instead of
+# threading state back through a pipe, the resolved values get handed back
+# purely for display via a small gitignored marker file, $REPO_DIR/.claude-alias
+# (line 1: alias name, line 2: rc file path) — the same "write a file, read it
+# back" pattern claude.sh already uses for .env.
+# ---------------------------------------------------------------------------
+
+_common_alias_rcfile() {
+    case "$(uname -s)" in
+        Darwin*)
+            if [[ "${SHELL:-}" == */zsh ]]; then
+                printf '%s' "$HOME/.zshrc"
+            else
+                printf '%s' "$HOME/.bash_profile"
+            fi
+            ;;
+        Linux*)
+            printf '%s' "$HOME/.bash_aliases" # Linux and WSL
+            ;;
+        *)
+            printf '%s' "" # WSL/macOS paths are untested — logic based on standard conventions
+            ;;
+    esac
     return 0
 }
 
