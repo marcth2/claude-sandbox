@@ -205,6 +205,7 @@ init() {
     # Closing summary — source .env to read what setup wrote, and the
     # .claude-alias marker file for what the alias prompt (run inside
     # setup.sh) decided.
+    # shellcheck disable=SC1091 # .env is gitignored; absent by design outside a configured checkout
     [[ -f "$REPO_DIR/.env" ]] && source "$REPO_DIR/.env"
     local alias_name="" alias_rcfile=""
     if [[ -f "$REPO_DIR/.claude-alias" ]]; then
