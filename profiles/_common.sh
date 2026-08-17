@@ -968,7 +968,6 @@ EOF
     echo ".env written to $ENV_FILE"
 }
 
-# shellcheck disable=SC2119  # optional --no-cache arg; existing bare call sites (profiles/*/setup.sh) intentionally omit it
 common_build_image() {
     local cache_flag=""
     [[ "${1:-}" == "--no-cache" ]] && cache_flag="--no-cache"
