@@ -1004,7 +1004,12 @@ disable-model-invocation: true
 
 Authenticate `gh` (the GitHub CLI) for this container via OAuth device flow.
 
-1. Run `gh auth status`. If it already reports an authenticated account, tell the user and stop.
+1. Run `gh auth status || true` (the `|| true` makes the command always exit 0, so a fresh
+   container's "not logged in" state — expected and normal, not an error — never renders as a
+   failed command). Read the printed message to tell which case you're in: if it names an
+   authenticated account, tell the user and stop. If it says "You are not logged into any GitHub
+   hosts", that's the expected first-run state — say so in your own words (e.g. "Not authenticated
+   yet — starting the device-flow login now") and continue to step 2.
 2. Otherwise, run (via the Bash tool, with a long timeout — this blocks until the user completes
    auth in their browser or it times out):
    ```
