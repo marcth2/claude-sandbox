@@ -97,5 +97,4 @@ culminating in the `1.0.0` release — see [CHANGELOG.md](CHANGELOG.md). Candida
 minor release, no active work yet:
 
 - MCP integrations (Confluence, Slack, Jira, AWS, etc.)
-- Prototype improvements to the install script's UX and output formatting
 - Support for adding new plugins/profiles beyond the current three
