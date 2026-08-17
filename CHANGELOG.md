@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.2] — 2026-08-17
+
+### Changed
+
+- `--recover` renamed to `--fresh` — "recover" implied a safe repair, but the flag is destructive
+  (wipes `.env`/`.home/` after confirmation). Behavior is unchanged.
+
+### Added
+
+- `--update` flag: rebuilds the Docker image from scratch (`--no-cache`) for the locked profile,
+  without touching `.env`/`.home/` — lets you pick up a newer Claude Code release without a full
+  `--fresh`. Needs `--no-cache` specifically: a plain rebuild hits Docker's layer cache on the
+  Dockerfiles' `npm install -g` step and silently keeps the old binary.
+
 ## [1.1.1] — 2026-08-17
 
 ### Fixed

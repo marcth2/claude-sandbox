@@ -60,10 +60,16 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
 - Every container run is resource-capped (`--memory 2g --cpus 1.5 --pids-limit 256`) in addition
   to the `--cap-drop ALL`/`--read-only` containment above — bounds a runaway process inside the
   sandbox rather than just constraining what it can touch.
-- `--recover` wipes `.env`/`.home/` and re-runs `setup.sh` for the already-locked profile — it never
-  touches `.claude-profile`. Earlier it doubled as a profile-switcher (deleted `.claude-profile`
-  too), which quietly defeated the profile-lock decision above; scoping it to the current profile
-  closes that gap instead of just tidying its symptoms.
+- `--fresh` (formerly `--recover` — renamed since "recover" implied a safe repair when the
+  operation is actually destructive) wipes `.env`/`.home/` and re-runs `setup.sh` for the
+  already-locked profile — it never touches `.claude-profile`. Earlier it doubled as a
+  profile-switcher (deleted `.claude-profile` too), which quietly defeated the profile-lock
+  decision above; scoping it to the current profile closes that gap instead of just tidying its
+  symptoms.
+- `--update` rebuilds only the Docker image (`docker compose build --no-cache`), touching neither
+  `.env` nor `.home/` — for picking up a newer Claude Code release without a full `--fresh`. Needs
+  `--no-cache`: a plain rebuild hits Docker's layer cache on the Dockerfiles' `npm install -g`
+  step and silently reuses the old binary.
 - `common_seed_gh_skill` (in `_common.sh`, called by every profile's `setup.sh`) seeds a
   `/gh-login` skill into `.home/.claude/skills/gh-login/`. Manual-invoke only
   (`disable-model-invocation: true`) — an OAuth login shouldn't trigger itself. `gh` is already in
@@ -86,7 +92,7 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
 - No commits directly to `master`. Branch → commit → push → PR (what changed + how tested) →
   squash-merge after review.
 - No automated test suite. Verify by running the affected profile(s):
-  `./claude.sh --recover` re-runs setup for the locked profile in place, or a scoped `docker run`
+  `./claude.sh --fresh` re-runs setup for the locked profile in place, or a scoped `docker run`
   reproducing the relevant slice of `claude.sh`'s args. Changes to `profiles/_common.sh` or
   `claude.sh`'s docker args → smoke test all three profiles (shared code path).
 - Version bumps (`VERSION` + a `CHANGELOG.md` entry — see that file for what warrants one) also get
