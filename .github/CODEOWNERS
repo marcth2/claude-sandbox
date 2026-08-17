@@ -1,0 +1,3 @@
+# Blanket ownership for a solo-maintained repo. If a second collaborator
+# ever gets write access, scope this by path instead.
+* @marcth2
