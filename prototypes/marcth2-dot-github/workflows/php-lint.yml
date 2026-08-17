@@ -1,0 +1,56 @@
+# PROTOTYPE — throwaway artifact for wayfinder ticket #60, not production code.
+# Destined for marcth2/.github as .github/workflows/php-lint.yml, called via
+# `workflow_call` from PHP/Laravel repos. Speculative: no real personal PHP
+# repo exists yet to validate this against.
+name: php-lint
+
+on:
+  workflow_call:
+
+jobs:
+  lint:
+    name: php -l + PHP_CodeSniffer + PHP-CS-Fixer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: phpcs, php-cs-fixer
+
+      - name: Find tracked PHP files
+        id: files
+        run: |
+          mapfile -t files < <(git ls-files '*.php')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No .php files tracked — nothing to lint."
+            echo "has_files=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_files=true" >>"$GITHUB_OUTPUT"
+          printf '%s\n' "${files[@]}" >/tmp/php-files.txt
+
+      - name: php -l (syntax check)
+        if: steps.files.outputs.has_files == 'true'
+        run: |
+          mapfile -t files </tmp/php-files.txt
+          status=0
+          for f in "${files[@]}"; do
+            php -l "$f" || status=1
+          done
+          exit "$status"
+
+      - name: PHP_CodeSniffer (PSR-12)
+        if: steps.files.outputs.has_files == 'true'
+        run: |
+          mapfile -t files </tmp/php-files.txt
+          phpcs --standard=PSR12 "${files[@]}"
+
+      - name: PHP-CS-Fixer (PSR-12, dry run)
+        if: steps.files.outputs.has_files == 'true'
+        run: |
+          mapfile -t files </tmp/php-files.txt
+          php-cs-fixer fix --rules=@PSR12 --dry-run --diff "${files[@]}"
