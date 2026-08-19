@@ -25,7 +25,16 @@ RUN groupmod -g "${USER_GID}" -n "${USERNAME}" node && \
 
 RUN mkdir -p /work/projects && chown "${USERNAME}:${USERNAME}" /work/projects
 
+# Exec-form ENTRYPOINT arrays get neither ARG substitution (not on Docker's
+# instruction allowlist) nor runtime shell expansion, but the system-prompt
+# seed's path depends on ${USERNAME} (varies per checkout). Bake the resolved
+# path into a wrapper script instead, at build time, where ARG substitution
+# does apply — exec preserves claude as PID 1 for correct signal handling.
+RUN printf '#!/bin/sh\nexec claude --dangerously-skip-permissions --append-system-prompt-file %s "$@"\n' \
+    "/home/${USERNAME}/.claude/system-prompt.md" >/usr/local/bin/claude-entrypoint.sh \
+    && chmod a+rx /usr/local/bin/claude-entrypoint.sh
+
 USER ${USERNAME}
 WORKDIR /work/projects
 
-ENTRYPOINT ["claude", "--dangerously-skip-permissions"]
+ENTRYPOINT ["/usr/local/bin/claude-entrypoint.sh"]

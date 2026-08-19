@@ -20,6 +20,7 @@ common_write_env
 # shellcheck disable=SC2119  # common_build_image's --no-cache arg is optional; this call intentionally omits it
 common_build_image
 common_seed_home
+common_seed_system_prompt
 common_seed_gh_skill
 
 cat >"$HOME_DIR/.claude/settings.json" <<'SETTINGS'

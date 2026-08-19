@@ -412,6 +412,10 @@ _dash_compose_row() {
                 value="${ALIAS_NAME:-(skip)}   ${UI_DIM}[Enter: edit]${UI_RESET}"
             fi
             ;;
+        system_prompt_seed)
+            label="System-Prompt Seed"
+            value="${SYSTEM_PROMPT_SEED}   ${UI_DIM}[Enter: toggle — fetches disler/fixing-smartass-opus-5's communication-style prompt at setup]${UI_RESET}"
+            ;;
         confirm)
             if [[ "$AUTH_MODE" == "apikey" && -z "$API_KEY" ]]; then
                 value="${UI_YELLOW}▶ CONFIRM${UI_RESET}  ${UI_DIM}(blocked — API key required above)${UI_RESET}"
@@ -808,6 +812,13 @@ _dash_activate_row() {
                 _dash_edit_alias_name
             fi
             ;;
+        system_prompt_seed)
+            if [[ "$SYSTEM_PROMPT_SEED" == "yes" ]]; then
+                SYSTEM_PROMPT_SEED="no"
+            else
+                SYSTEM_PROMPT_SEED="yes"
+            fi
+            ;;
         confirm) _dash_try_confirm ;;
     esac
     return 0
@@ -864,7 +875,9 @@ _common_ensure_dashboard() {
         _dash_resolve_alias_action
     fi
 
-    _DASH_ROW_IDS=(auth_mode base_url api_key model ssh_dir workdir git_name git_email alias_name confirm)
+    SYSTEM_PROMPT_SEED="${SYSTEM_PROMPT_SEED:-yes}"
+
+    _DASH_ROW_IDS=(auth_mode base_url api_key model ssh_dir workdir git_name git_email alias_name system_prompt_seed confirm)
     _DASH_SEL=0
     _DASH_STATUS_MSG=""
     _DASH_DONE=""
@@ -959,6 +972,9 @@ ANTHROPIC_MODEL=${ANTHROPIC_MODEL}
 SSH_DIR=${SSH_DIR}
 CLAUDE_WORKDIR=${WORKDIR_INPUT}
 
+# System-prompt seed
+SYSTEM_PROMPT_SEED=${SYSTEM_PROMPT_SEED}
+
 # Container user (captured at setup — matches host uid/gid for correct file ownership)
 CONTAINER_USER=${CONTAINER_USER}
 CONTAINER_UID=${CONTAINER_UID}
@@ -994,6 +1010,29 @@ common_seed_home() {
     email = $GIT_USER_EMAIL
 EOF
         echo "  .gitconfig seeded ($GIT_USER_NAME <$GIT_USER_EMAIL>)."
+    fi
+}
+
+# Fetches the system-prompt seed at setup time, or writes an empty placeholder
+# on opt-out (SYSTEM_PROMPT_SEED=no) or fetch failure. The target file always
+# exists either way — the ENTRYPOINT's --append-system-prompt-file points at
+# it unconditionally, and an empty file is a verified no-op while a missing
+# one is a hard error.
+common_seed_system_prompt() {
+    local target="$HOME_DIR/.claude/system-prompt.md"
+    mkdir -p "$HOME_DIR/.claude"
+
+    if [[ "${SYSTEM_PROMPT_SEED:-yes}" != "yes" ]]; then
+        : >"$target"
+        return 0
+    fi
+
+    echo "  Fetching system-prompt seed from disler/fixing-smartass-opus-5..."
+    if curl -fsSL "https://raw.githubusercontent.com/disler/fixing-smartass-opus-5/main/sr_opus_5_system_prompt.md" -o "$target"; then
+        echo "  system-prompt.md seeded."
+    else
+        echo "  Fetch failed — writing empty placeholder (session starts without a seeded system prompt)."
+        : >"$target"
     fi
 }
 
