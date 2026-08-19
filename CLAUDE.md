@@ -51,8 +51,15 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
   captured from the host at setup (`CONTAINER_USER/UID/GID` in `.env`) so mount ownership is
   always correct.
 - Docker GID is detected at runtime (`getent group docker`), not hardcoded — varies per host.
-- `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`. `claude.sh --confirm`
-  overrides the entrypoint to plain `claude` at `docker run` time for real permission prompts.
+- `--dangerously-skip-permissions` is baked into every image's `ENTRYPOINT`.
+  `claude.sh --ask-for-permission` overrides the entrypoint to plain `claude` at `docker run` time
+  for real permission prompts. (Renamed from `--confirm`, which itself replaced the
+  originally-proposed `--interactive` — collided with Claude Code's own `-p`/`--print` convention —
+  and `--prompt`, which reads as "give it a prompt," the opposite of what the flag does.)
+- `claude.sh --no-system-prompt` overrides the entrypoint the same way as `--ask-for-permission`,
+  but re-adds `--dangerously-skip-permissions` to the args so only the seeded system prompt is
+  dropped for that invocation — the two flags share the entrypoint-swap mechanism but toggle
+  different things.
 - Auth is injected via `-e` flags at `docker run`, never via `settings.json`.
 - `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is injected as a real env var (not just in seeded
   `settings.json`) whenever `--auth=apikey` is used — gateway-routed auth needs it set at the
@@ -66,10 +73,14 @@ diagrams of the profile/image build matrix and the `.home/` mount + auth-injecti
   profile-switcher (deleted `.claude-profile` too), which quietly defeated the profile-lock
   decision above; scoping it to the current profile closes that gap instead of just tidying its
   symptoms.
-- `--update` rebuilds only the Docker image (`docker compose build --no-cache`), touching neither
-  `.env` nor `.home/` — for picking up a newer Claude Code release without a full `--fresh`. Needs
-  `--no-cache`: a plain rebuild hits Docker's layer cache on the Dockerfiles' `npm install -g`
-  step and silently reuses the old binary.
+- `--update` rebuilds the Docker image (`docker compose build --no-cache`) and re-seeds
+  `.home/.claude/system-prompt.md` via `common_seed_system_prompt` — it never touches `.env`, and
+  the only thing it writes under `.home/` is that one seed file. Needs `--no-cache`: a plain
+  rebuild hits Docker's layer cache on the Dockerfiles' `npm install -g` step and silently reuses
+  the old binary. The re-seed exists because a rebuilt image can bake in a new hard dependency
+  (e.g. this file, required unconditionally by the `ENTRYPOINT`) that only `setup.sh` normally
+  creates — `--update` never runs `setup.sh`, so any checkout whose `.home/` predates a given
+  seeded-file dependency would otherwise hard-fail on launch after `--update` alone.
 - `common_seed_gh_skill` (in `_common.sh`, called by every profile's `setup.sh`) seeds a
   `/gh-login` skill into `.home/.claude/skills/gh-login/`. Manual-invoke only
   (`disable-model-invocation: true`) — an OAuth login shouldn't trigger itself. `gh` is already in

@@ -25,8 +25,11 @@ Options:
   --auth=sso|apikey   Override default auth mode from .env
   --model=<id>        Override ANTHROPIC_MODEL for this invocation
   --workdir=<path>    Override working directory for this invocation
-  --confirm           Use Claude Code's real permission prompts instead of
+  --ask-for-permission
+                      Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
+  --no-system-prompt  Skip the seeded system-prompt.md for this invocation
+                      only (--dangerously-skip-permissions still applies)
   --fresh             Wipe and rebuild .env and .home/ for this checkout's
                       already-selected profile (requires confirmation). Does
                       NOT let you change profiles — clone the repo again for
@@ -358,6 +361,12 @@ do_update() {
 
     common_build_image --no-cache
 
+    # A rebuilt image can bake in a new hard dependency on a seeded file (e.g.
+    # system-prompt.md, required unconditionally by the ENTRYPOINT) that only
+    # setup.sh normally creates. --update never runs setup.sh, so re-seed here
+    # too — idempotent, and it only touches files under .home/, never .env.
+    common_seed_system_prompt
+
     echo ""
     echo "Update complete. Run '${REPO_DIR}/claude.sh' to launch with the refreshed image."
     exit 0
@@ -393,7 +402,8 @@ CONTAINER_HOME="/home/${CONTAINER_USER:-$(id -un)}"
 AUTH="${DEFAULT_AUTH:-apikey}"
 WORKDIR_OVERRIDE=""
 MODEL_OVERRIDE=""
-CONFIRM=false
+ASK_FOR_PERMISSION=false
+NO_SYSTEM_PROMPT=false
 CLAUDE_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -422,8 +432,12 @@ while [[ $# -gt 0 ]]; do
             WORKDIR_OVERRIDE="$2"
             shift 2
             ;;
-        --confirm)
-            CONFIRM=true
+        --ask-for-permission)
+            ASK_FOR_PERMISSION=true
+            shift
+            ;;
+        --no-system-prompt)
+            NO_SYSTEM_PROMPT=true
             shift
             ;;
         --fresh) do_fresh ;;
@@ -469,10 +483,19 @@ case "$PROFILE" in
 esac
 
 DOCKER_ARGS=(run --rm -it -w "$CONTAINERDIR")
-# --dangerously-skip-permissions is baked into the image's ENTRYPOINT. --confirm
-# overrides the entrypoint to plain `claude`, dropping that flag so Claude Code's
-# real allow/deny prompts are used instead.
-[[ "$CONFIRM" == "true" ]] && DOCKER_ARGS+=(--entrypoint claude)
+# --dangerously-skip-permissions and --append-system-prompt-file are both baked
+# into the image's ENTRYPOINT wrapper script. --ask-for-permission overrides the
+# entrypoint to plain `claude`, dropping both so Claude Code's real allow/deny
+# prompts are used instead (no seeded system prompt either, since it bypasses
+# the wrapper entirely). --no-system-prompt does the same entrypoint swap but
+# re-adds --dangerously-skip-permissions to CLAUDE_ARGS, so only the prompt is
+# dropped.
+if [[ "$ASK_FOR_PERMISSION" == "true" ]]; then
+    DOCKER_ARGS+=(--entrypoint claude)
+elif [[ "$NO_SYSTEM_PROMPT" == "true" ]]; then
+    DOCKER_ARGS+=(--entrypoint claude)
+    CLAUDE_ARGS=(--dangerously-skip-permissions "${CLAUDE_ARGS[@]}")
+fi
 DOCKER_ARGS+=(-v "$WORKDIR:$WORKDIR")
 DOCKER_ARGS+=(-v "$REPO_DIR/.home:$CONTAINER_HOME")
 DOCKER_ARGS+=(-v /var/run/docker.sock:/var/run/docker.sock)
