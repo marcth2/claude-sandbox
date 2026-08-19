@@ -95,8 +95,11 @@ claude-sandbox [OPTIONS] [-- CLAUDE_ARGS...]
   --auth=sso|apikey   Override default auth mode from .env
   --model=<id>        Override ANTHROPIC_MODEL for this invocation
   --workdir=<path>    Override working directory for this invocation
-  --confirm           Use Claude Code's real permission prompts instead of
+  --ask-for-permission
+                      Use Claude Code's real permission prompts instead of
                       --dangerously-skip-permissions
+  --no-system-prompt  Skip the seeded system-prompt.md for this invocation
+                      only (--dangerously-skip-permissions still applies)
   --fresh             Wipe and rebuild .env/.home/ for this checkout — see
                       "Starting fresh" below
   --update            Rebuild the Docker image only (no cache) — see

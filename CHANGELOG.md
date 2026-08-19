@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.1.3] — 2026-08-19
+
+### Added
+
+- Opt-in system-prompt seed: a new `SYSTEM_PROMPT_SEED` dashboard row (default yes) fetches
+  disler/fixing-smartass-opus-5's communication-style prompt into `.home/.claude/system-prompt.md`
+  at setup, and every profile's `ENTRYPOINT` appends it via `--append-system-prompt-file`.
+  Opt-out writes an empty placeholder instead of skipping the fetch, since the flag is baked in
+  unconditionally.
+- `--no-system-prompt` flag: skips the seeded system prompt for a single invocation only, without
+  giving up `--dangerously-skip-permissions` — same entrypoint-override mechanism as
+  `--ask-for-permission`, but toggles the prompt instead of the permission mode.
+
+### Changed
+
+- `--confirm` renamed to `--ask-for-permission` — clearer about what it restores (Claude Code's
+  real allow/deny prompts), and the project is still in testing so a straight rename was fine
+  rather than keeping `--confirm` around as an alias.
+- `--update` now also re-seeds `.home/.claude/system-prompt.md` via `common_seed_system_prompt`,
+  in addition to rebuilding the image. It still never touches `.env`.
+
+### Fixed
+
+- `--update` on a checkout whose `.home/` predates the system-prompt-seed feature: the rebuilt
+  image's `ENTRYPOINT` requires `system-prompt.md` unconditionally, but `--update` never runs
+  `setup.sh` (the only place that used to create it) — every such checkout hard-failed on launch
+  after `--update` alone. Fixed by re-seeding the file directly from `--update` instead.
+
 ## [1.1.2] — 2026-08-17
 
 ### Changed
