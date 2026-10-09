@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+- `pandoc` and `weasyprint` (as pandoc's PDF engine) in every image, so Markdown converts to
+  DOCX/PDF inside the container without TeX Live. `typst` was the preferred engine but isn't
+  packaged in Debian trixie. Run `./claude.sh --update` to pick them up.
+
 ## [1.1.2] — 2026-08-17
 
 ### Changed
