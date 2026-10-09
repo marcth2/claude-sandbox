@@ -1,5 +1,8 @@
 FROM node:26-slim
 
+# pandoc + weasyprint (PDF engine: `pandoc --pdf-engine=weasyprint`; typst isn't packaged in trixie).
+# python3-munkres satisfies python3-fonttools' `python3-scipy | python3-munkres` dependency so
+# apt doesn't pull in scipy + numpy (~100MB) that weasyprint never uses.
 RUN apt-get update && apt-get install -y \
     git curl ca-certificates gnupg \
     && install -m 0755 -d /etc/apt/keyrings \
@@ -9,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update \
     && apt-get install -y docker-ce-cli gh \
+    && apt-get install -y --no-install-recommends pandoc weasyprint python3-munkres \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @anthropic-ai/claude-code oh-my-claude-sisyphus

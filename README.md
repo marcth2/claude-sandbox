@@ -73,6 +73,20 @@ the printed code/URL on your host browser, and `gh`/`git push`/`gh pr create` wo
 Credential state lands in `.home/.config/gh/`, bind-mounted like everything else in `.home/`, so it
 survives container restarts without re-authenticating each session.
 
+## Document conversion
+
+Every image includes [pandoc](https://pandoc.org/) plus [WeasyPrint](https://weasyprint.org/) as a
+lightweight PDF engine (no TeX Live), so Markdown converts to DOCX and PDF from inside a session:
+
+```bash
+pandoc cv.md -o cv.docx
+pandoc cv.md -o cv.pdf --pdf-engine=weasyprint
+```
+
+Both are installed at image build time — the container's read-only rootfs means nothing can be
+`apt install`ed at runtime. Typographic characters (en dashes, `•`, etc.) render in DejaVu, which
+WeasyPrint pulls in. Existing checkouts pick these up with `./claude.sh --update`.
+
 ## Auth modes
 
 | Flag | Method | Credential lives in |
